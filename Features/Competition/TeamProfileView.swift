@@ -50,7 +50,7 @@ struct TeamProfileView: View {
                 }
             }
             Section {
-                LabeledContent("Rank", value: stats?.rank.map { String($0) } ?? "Unavailable")
+                LabeledContent("Rank", value: stats?.standingRank.map { String($0) } ?? "Unavailable")
                 LabeledContent("Qualification matches", value: stats?.qualMatchesPlayed.map { String($0) } ?? "Unavailable")
                 if let w = stats?.wins, let l = stats?.losses, let t = stats?.ties {
                     LabeledContent("Wins–losses–ties", value: "\(w)–\(l)–\(t)")
@@ -79,7 +79,7 @@ struct TeamProfileView: View {
                 if let appearances {
                     if appearances.value.isEmpty { Text("No season events listed.").foregroundStyle(.secondary) }
                     ForEach(appearances.value.sorted { $0.eventCode < $1.eventCode }) { participation in
-                        LabeledContent(participation.eventCode, value: participation.stats?.rank.map { "Rank \($0)" } ?? "Rank unavailable")
+                        LabeledContent(participation.eventCode, value: participation.stats?.standingRank.map { "Rank \($0)" } ?? "Rank unavailable")
                     }
                 }
             }
@@ -164,7 +164,7 @@ struct CompareTeamsView: View {
                                     Text("#\(number)").font(.headline.monospacedDigit()).frame(minWidth: 78, alignment: .leading)
                                 }
                             }
-                            compareRow("Rank") { standings[$0]?.rank.map { String($0) } ?? "—" }
+                            compareRow("Rank") { standings[$0]?.standingRank.map { String($0) } ?? "—" }
                             compareRow("Qual. matches") { standings[$0]?.qualMatchesPlayed.map { String($0) } ?? "—" }
                             compareRow("Est. NP OPR") { standings[$0]?.opr?.totalPointsNp.map { TeamProfileView.format($0) } ?? "—" }
                             compareRow("Reports") { number in String(observations.filter { $0.team == number }.count) }
@@ -199,7 +199,7 @@ struct CompareTeamsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func compareRow(_ name: String, value: (Int) -> String) -> some View {
+    private func compareRow(_ name: String, value: @escaping (Int) -> String) -> some View {
         GridRow {
             Text(name).font(.subheadline)
             ForEach(selected.sorted(), id: \.self) { number in

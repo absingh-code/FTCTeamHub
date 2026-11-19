@@ -139,6 +139,8 @@ struct FTCParticipation: Codable, Hashable, Identifiable, Sendable {
         let losses: Int?
         let ties: Int?
         let opr: Estimate?
+
+        var standingRank: Int? { rank.flatMap { $0 > 0 ? $0 : nil } }
     }
 
     let season: Int

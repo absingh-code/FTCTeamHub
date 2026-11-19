@@ -136,7 +136,7 @@ struct CompetitionTabView: View {
             let displayed = numbers.filter { detail.directory.label($0).localizedCaseInsensitiveContains(search.trimmed) || search.trimmed.isEmpty }
                 .sorted { a, b in
                     if section == .teams { return a < b }
-                    return (standings[a]?.rank ?? Int.max, a) < (standings[b]?.rank ?? Int.max, b)
+                    return (standings[a]?.standingRank ?? Int.max, a) < (standings[b]?.standingRank ?? Int.max, b)
                 }
             if section == .teams && numbers.count >= 2 {
                 Section {
@@ -166,7 +166,7 @@ struct CompetitionTabView: View {
                         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                             Text(detail.directory.label(number))
                             if section == .standings {
-                                Text(standings[number]?.rank.map { "Rank \($0)" } ?? "Rank pending")
+                                Text(standings[number]?.standingRank.map { "Rank \($0)" } ?? "Rank pending")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
