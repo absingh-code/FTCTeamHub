@@ -29,7 +29,26 @@ targets:
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
-    scheme: {}
+    scheme:
+      testTargets: [FTCTeamHubTests, FTCTeamHubUITests]
+  FTCTeamHubTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: FTCTeamHub
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+  FTCTeamHubUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: FTCTeamHub
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
 packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS

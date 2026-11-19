@@ -41,7 +41,7 @@ enum WorkspaceStore {
         return try open(at: deviceFolder.appendingPathComponent(digest + ".store"))
     }
 
-    private static func open(at url: URL) throws -> ModelContainer {
+    static func open(at url: URL) throws -> ModelContainer {
         let config = ModelConfiguration(schema: current, url: url, cloudKitDatabase: .none)
         return try ModelContainer(for: current, configurations: [config])
     }

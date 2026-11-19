@@ -36,3 +36,22 @@ jobs:
           name: FTCTeamHub-ios-build-log
           path: build/release/xcodebuild.log
           if-no-files-found: ignore
+
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Run iOS unit and smoke tests
+        run: bash scripts/test-ios.sh
+      - name: Upload simulator screenshots and test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FTCTeamHub-simulator-results
+          path: |
+            build/test/xcodebuild-test.log
+            build/test/screenshots
+          if-no-files-found: ignore

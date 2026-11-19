@@ -41,11 +41,11 @@ enum DS {
 struct TeamIdentity: View {
     var body: some View {
         HStack(spacing: DS.Spacing.md) {
-            Image(systemName: "gearshape.2.fill")
-                .font(.title2)
-                .foregroundStyle(DS.Color.accent)
+            Image("TeamHubMark")
+                .resizable()
+                .scaledToFit()
                 .frame(width: 52, height: 52)
-                .background(DS.Color.accent.opacity(0.12), in: .rect(cornerRadius: DS.Radius.control))
+                .clipShape(.rect(cornerRadius: DS.Radius.control))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text("Wild Circuits").font(.headline)
