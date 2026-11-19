@@ -66,8 +66,9 @@ final class MatchObservation {
         team = target.team
         self.author = author
         schemaVersion = key.season == 2026 ? 1 : 0
-        created = .now
-        updated = created
+        let now = Date.now
+        created = now
+        updated = now
     }
 
     var hasObservations: Bool {
@@ -194,8 +195,9 @@ final class RobotIssue {
         self.severity = severity.rawValue
         self.status = status.rawValue
         self.owner = owner
-        created = .now
-        updated = created
+        let now = Date.now
+        created = now
+        updated = now
         matchKey = match?.key.id
         matchLabel = match?.label
         self.resolution = resolution
