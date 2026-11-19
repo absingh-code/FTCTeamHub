@@ -1,183 +1,120 @@
 import SwiftUI
 import SwiftData
+import Network
 
 struct TeamTabView: View {
+    @Environment(AuthenticationViewModel.self) private var auth
+    @Environment(CompetitionWorkspace.self) private var competition
+    @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @Query(sort: \AppUser.name) private var members: [AppUser]
-    @Environment(AuthenticationViewModel.self) private var authVM
-    @State private var search = ""
+    @State private var signOut = false
+    @State private var showingContact = false
 
-    var filtered: [AppUser] {
-        if search.isEmpty { return members }
-        return members.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    var body: some View {
+        List {
+            Section("Team") {
+                TeamIdentity()
+                Link("FIRST Team Profile", destination: URL(string: "https://ftc-events.firstinspires.org/team/36611")!)
+            }
+            Section("Workspace") {
+                if let user = auth.currentUser {
+                    LabeledContent("Identity", value: user.name)
+                    if !user.email.isEmpty { LabeledContent("Email", value: user.email) }
+                    LabeledContent("Access", value: user.role)
+                }
+                Text("Team records are stored in this workspace on this device. Public competition data comes from FTCScout.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                LabeledContent("Connection", value: competition.connection.label)
+                if let updated = competition.detail?.lastUpdated {
+                    LabeledContent("Event data fetched", value: updated.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
+            Section("Local Contacts") {
+                if members.isEmpty {
+                    Text("Add names for local task assignments.").foregroundStyle(.secondary)
+                }
+                ForEach(members) { member in
+                    LabeledContent(member.name, value: member.role)
+                }
+                Button("Add Local Contact", systemImage: "person.badge.plus") { showingContact = true }
+            }
+            Section("App") {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.rawValue).tag($0.rawValue) }
+                }
+                LabeledContent("Version", value: appVersion)
+                Link("Report an App Issue", destination: URL(string: "https://github.com/absingh-code/FTCTeamHub/issues")!)
+            }
+            Section {
+                Button(auth.isDeviceWorkspace ? "Close Workspace" : "Sign Out", role: .destructive) { signOut = true }
+            }
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(auth.isDeviceWorkspace ? "Close this workspace?" : "Sign out of Google?",
+                            isPresented: $signOut, titleVisibility: .visible) {
+            Button(auth.isDeviceWorkspace ? "Close Workspace" : "Sign Out", role: .destructive) { auth.signOut() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Saved records stay in the current workspace on this device.") }
+        .sheet(isPresented: $showingContact) { ContactForm() }
     }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+}
+
+private struct ContactForm: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var role = "Member"
+    @State private var error: String?
 
     var body: some View {
         NavigationStack {
-            List {
-                if let current = authVM.currentUser {
-                    Section("You") {
-                        MemberRow(user: current)
-                    }
+            Form {
+                TextField("Name", text: $name)
+                Picker("Team area", selection: $role) {
+                    ForEach(["Member", "Software", "Hardware", "Strategy", "Scout"], id: \.self) { Text($0).tag($0) }
                 }
-
-                Section("Roster") {
-                    ForEach(filtered) { user in
-                        MemberRow(user: user)
-                    }
-                }
+                Text("This contact is for task assignment on this device.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                FormSaveError(message: error)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
-            .searchable(text: $search, prompt: "Search members")
-            .navigationTitle("Team")
+            .navigationTitle("Add Contact")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        ChatView()
-                    } label: {
-                        Image(systemName: "bubble.left.and.bubble.right")
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        context.insert(AppUser(id: "contact:" + UUID().uuidString, name: name.trimmed, email: "", role: role))
+                        do {
+                            try context.save()
+                            dismiss()
+                        } catch {
+                            context.rollback()
+                            self.error = "Couldn’t save this contact. Try again."
+                        }
                     }
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Sign out") {
-                        authVM.signOut()
-                    }
-                }
-            }
-            .overlay {
-                if members.isEmpty && authVM.currentUser == nil {
-                    ContentUnavailableView(
-                        "No members",
-                        systemImage: "person.2",
-                        description: Text("Team members appear after they sign in.")
-                    )
+                    .disabled(name.trimmed.isEmpty)
                 }
             }
         }
     }
 }
 
-struct MemberRow: View {
-    let user: AppUser
+enum ConnectionState: String {
+    case checking
+    case available
+    case offline
 
-    var body: some View {
-        HStack(spacing: DS.Spacing.md) {
-            AvatarView(url: user.profileImageURL, name: user.name)
-            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                Text(user.name)
-                    .font(DS.Font.body)
-                    .foregroundStyle(DS.Color.labelPrimary)
-                Text(user.role)
-                    .font(DS.Font.caption)
-                    .foregroundStyle(DS.Color.labelSecondary)
-            }
-            Spacer()
-            if user.isActive {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-            }
-        }
-        .padding(.vertical, DS.Spacing.xs)
-    }
-}
-
-struct AvatarView: View {
-    let url: String?
-    let name: String
-
-    var body: some View {
-        Group {
-            if let url, let imageURL = URL(string: url) {
-                AsyncImage(url: imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        initials
-                    }
-                }
-            } else {
-                initials
-            }
-        }
-        .frame(width: 36, height: 36)
-        .clipShape(Circle())
-    }
-
-    private var initials: some View {
-        Text(String(name.prefix(1)).uppercased())
-            .font(DS.Font.label)
-            .foregroundStyle(DS.Color.labelPrimary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DS.Color.raised)
-    }
-}
-
-struct ChatView: View {
-    @State private var messages: [String] = []
-    @State private var draft = ""
-    @State private var isConnected = false
-    @State private var errorMessage: String?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if let error = errorMessage {
-                Text(error)
-                    .font(DS.Font.caption)
-                    .foregroundStyle(.red)
-                    .padding(DS.Spacing.sm)
-                    .frame(maxWidth: .infinity)
-                    .background(DS.Color.raised)
-            }
-
-            if !isConnected {
-                Text("Offline — messages will send when connected")
-                    .font(DS.Font.caption)
-                    .foregroundStyle(DS.Color.labelSecondary)
-                    .padding(DS.Spacing.sm)
-                    .frame(maxWidth: .infinity)
-                    .background(DS.Color.surface)
-            }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: DS.Spacing.md) {
-                    ForEach(messages, id: \.self) { msg in
-                        Text(msg)
-                            .font(DS.Font.body)
-                            .padding(DS.Spacing.md)
-                            .background(DS.Color.raised, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
-                    }
-                }
-                .padding(DS.Spacing.lg)
-            }
-
-            HStack(spacing: DS.Spacing.sm) {
-                TextField("Message", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                Button {
-                    guard !draft.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    messages.append(draft)
-                    draft = ""
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                }
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(DS.Spacing.lg)
-            .background(DS.Color.surface)
-        }
-        .background(DS.Color.background)
-        .navigationTitle("Chat")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            // Opt-in Firebase connection would set isConnected / errorMessage
-            isConnected = false
-            errorMessage = nil
+    var label: String {
+        switch self {
+        case .checking: "Checking"
+        case .available: "Network available"
+        case .offline: "Offline"
         }
     }
 }

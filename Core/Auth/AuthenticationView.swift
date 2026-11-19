@@ -1,47 +1,67 @@
 import SwiftUI
-import GoogleSignIn
 
 struct AuthenticationView: View {
-    @Environment(AuthenticationViewModel.self) private var authVM
+    @Environment(AuthenticationViewModel.self) private var auth
 
     var body: some View {
-        VStack(spacing: DS.Spacing.xxl) {
-            Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.xxxl) {
+                TeamIdentity()
 
-            Text("FTC Team Hub")
-                .font(DS.Font.display)
-                .foregroundStyle(DS.Color.labelPrimary)
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                    Text("Team Hub")
+                        .font(DS.Font.display)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Your match schedule, scouting reports and pit checks in one place.")
+                        .foregroundStyle(.secondary)
+                }
 
-            Text("Sign in with your team Google account")
-                .font(DS.Font.body)
-                .foregroundStyle(DS.Color.labelSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, DS.Spacing.xxl)
+                VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                    if auth.isGoogleConfigured {
+                        Button {
+                            Task { await auth.signIn() }
+                        } label: {
+                            Group {
+                                if auth.isSigningIn {
+                                    ProgressView().tint(.white)
+                                        .accessibilityLabel("Signing in with Google")
+                                } else {
+                                    Text("Continue with Google")
+                                }
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(auth.isSigningIn)
+                    } else {
+                        Label("Google Sign-In needs to be configured for this build.", systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
-            Button {
-                guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                      let root = scene.windows.first?.rootViewController else { return }
-                Task { await authVM.signIn(presenting: root) }
-            } label: {
-                Text("Continue with Google")
-                    .font(DS.Font.label)
-                    .foregroundStyle(DS.Color.labelPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(DS.Color.raised, in: RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous))
+                    Button { auth.openDeviceWorkspace() } label: {
+                        Label("Use On This Device", systemImage: "iphone")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(auth.isSigningIn)
+                    Text("On-device reports and team records are stored in this workspace on this device.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if case .error(let message) = auth.authState {
+                        Label(message, systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .accessibilityAddTraits(.updatesFrequently)
+                    }
+                }
             }
+            .frame(maxWidth: 430)
             .padding(.horizontal, DS.Spacing.xxl)
-
-            if case .error(let msg) = authVM.authState {
-                Text(msg)
-                    .font(DS.Font.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, DS.Spacing.xxl)
-            }
-
-            Spacer()
+            .padding(.vertical, 56)
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DS.Color.background)
     }
 }

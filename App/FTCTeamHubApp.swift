@@ -1,39 +1,36 @@
 import SwiftUI
-import SwiftData
 import GoogleSignIn
 
 @main
+@MainActor
 struct FTCTeamHubApp: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var authVM = AuthenticationViewModel()
-
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            AppUser.self,
-            TaskItem.self,
-            NotebookEntry.self,
-            ScoutingRecord.self,
-            Idea.self,
-            InventoryItem.self,
-            TeamEventRecord.self
-        ])
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-        do {
-            return try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            fatalError("ModelContainer failed: \(error)")
-        }
-    }()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var auth = AuthenticationViewModel()
+    @AppStorage("appearance") private var appearance = Appearance.system.rawValue
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(authVM)
-                .preferredColorScheme(.dark)
-                .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
-                }
+                .environment(auth)
+                .preferredColorScheme(Appearance(rawValue: appearance)?.scheme)
+                .tint(DS.Color.accent)
+                .task { await auth.restore() }
+                .onOpenURL { _ = GIDSignIn.sharedInstance.handle($0) }
         }
-        .modelContainer(sharedModelContainer)
+    }
+}
+
+enum Appearance: String, CaseIterable, Identifiable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+
+    var id: Self { self }
+    var scheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
     }
 }
