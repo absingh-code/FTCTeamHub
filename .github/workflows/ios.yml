@@ -1,0 +1,57 @@
+name: Build unsigned iOS IPA
+on:
+  push:
+    branches:
+      - main
+      - 'upgrade/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Build and package
+        run: bash scripts/build-unsigned-ipa.sh
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FTCTeamHub-unsigned-ipa
+          path: |
+            build/release/*.ipa
+            build/release/sha256.txt
+          if-no-files-found: error
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FTCTeamHub-ios-build-log
+          path: build/release/xcodebuild.log
+          if-no-files-found: ignore
+
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Run iOS unit and smoke tests
+        run: bash scripts/test-ios.sh
+      - name: Upload simulator screenshots and test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FTCTeamHub-simulator-results
+          path: |
+            build/test/xcodebuild-test.log
+            build/test/screenshots
+          if-no-files-found: ignore

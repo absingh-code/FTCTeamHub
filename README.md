@@ -1,70 +1,56 @@
-# FTC Team Hub
+# Wild Circuits Team Hub
 
-Native iOS 17+ SwiftUI app for FIRST Tech Challenge team management, scouting, and collaboration.
+Native iPhone and iPad workspace for FIRST Tech Challenge team **36611**. Requires iOS 17 or later.
 
-## Design rules (enforced)
+| Screen | What you can do |
+| --- | --- |
+| Today | See the next team match, readiness, critical issues, tasks and inventory alerts. |
+| Compete | Choose a season and event, browse matches and rankings, compare teams, and save match plans. |
+| Scout | Save match drafts, review and submit locally, capture pit reports, plan your own scouting coverage and export match reports to CSV. |
+| Work | Track tasks and owners, keep engineering notes and resource links, and record ideas. |
+| Pit | Log and resolve robot issues, edit readiness templates, run match-specific checks and manage inventory. |
+| Settings | Set appearance, add local contacts, check data freshness and manage your session. |
 
-- Dark mode only (`preferredColorScheme(.dark)`)
-- Native `TabView` — Today, Work, Pit, Scout, Team
-- Asset-backed colors only (see Assets.xcassets notes below)
-- SF Pro semantic typography
-- List / Form first, continuous corner radii
-- No gradients, glows, neon, emoji, slogans, fabricated metrics, custom tab bars
-- Loading / empty / error / offline states on every data screen
-- Role labels never contain the word “Lead” (use “Software”)
+## Build
 
-## Features
+On macOS with Xcode 26 and XcodeGen:
 
-- **Today** — assigned tasks, upcoming events, inventory alerts
-- **Work** — tasks (status columns), engineering notebook with templates, ideas + upvotes
-- **Pit** — searchable inventory, low-stock thresholds, maintenance status, QR scanner placeholder
-- **Scout** — local match reports with large steppers, CSV export, real FTCScout GraphQL client (honest errors)
-- **Team** — roster, Google Sign-In identity, basic chat (opt-in Firebase ready)
-- SwiftData persistence
-- Google Sign-In
-- Haptic feedback on meaningful actions
+```shell
+xcodegen generate
+open FTCTeamHub.xcodeproj
+```
 
-## Setup
+To archive and package an unsigned iPhone build:
 
-1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen) or open in Xcode and add the sources manually.
-2. Run `xcodegen` in this folder to generate the `.xcodeproj`.
-3. Add the six color sets in Assets.xcassets (dark values only):
+```shell
+bash scripts/build-unsigned-ipa.sh
+```
 
-| Name           | Hex     |
-|----------------|---------|
-| Background     | #0A0C0F |
-| Surface        | #12161B |
-| Raised         | #1A2027 |
-| Hairline       | #FFFFFF @ 8% |
-| Scrim          | #000000 @ 25% |
-| LabelPrimary   | #F2F4F7 |
-| LabelSecondary | #8E99A5 |
-| LabelTertiary  | #5C6672 |
+GitHub Actions runs **Build unsigned iOS IPA** and uploads the archive with a SHA-256 checksum. The packaging script checks the Mach-O executable, unsigned state and ZIP integrity. Sign the IPA with a compatible signing method before installation on a standard iPhone.
 
-4. Replace `YOUR_GOOGLE_CLIENT_ID` and the reversed client ID in `Resources/Info.plist`.
-5. Build and run on iOS 17+.
+Run the test suite on a locally installed iPhone simulator with `bash scripts/test-ios.sh`. The simulator job uploads logs and XCTest screenshots.
 
 ## Google Sign-In
 
-1. Create an OAuth client in Google Cloud Console (iOS type).
-2. Put the client ID in Info.plist under `GIDClientID`.
-3. Put the reversed client ID as a URL scheme under `CFBundleURLTypes`.
+The app keeps the original bundle identifier, `com.ftcteamhub.app`, and Google Sign-In SDK. For a configured build, set the iOS OAuth client ID via `GIDClientID` in `Resources/Info.plist` and the reversed client ID in `CFBundleURLTypes`. Both must come from the same Google iOS client. The Google button appears when this configuration is valid. **Use On This Device** opens a separate workspace with no Google account required. Sign in with the same Google account to return to its workspace.
 
-## Building an unsigned IPA
+## Records and compatibility
 
-Use the existing GitHub Actions workflow in your repository, or locally:
+- SwiftData stores workspace records on the device. Report drafts and checklists remain editable offline after setup. Each Google account and the on-device workspace use separate stores.
+- The upgrade keeps the original data models and matches the original store to a Google identity only when authored notebook, scouting or idea records consistently identify that account. Unattributed or mixed-author stores are left intact for manual recovery. Preserve the original store and its SQLite sidecars before any recovery.
+- FTCScout public data is cached on disk after a successful decode. Cached data appears on a failed refresh and is labeled with its fetch time where relevant. A first-time event download requires a connection.
+- Match drafts are keyed by season, event, FTCScout match ID, observed robot and scout. The same key opens the existing draft. On-device submission is an explicit reviewed state. Older reports and scores retain their original format and remain exportable.
+- BIOBUZZ reports record observations about one robot. Alliance scores and FTCScout OPR estimates are displayed in the competition workspace with source and context. For other seasons, the form supports phase-specific notes.
 
-```bash
-xcodebuild -scheme FTCTeamHub -configuration Release -sdk iphoneos -archivePath build/FTCTeamHub.xcarchive archive CODE_SIGNING_ALLOWED=NO
-# Then package the .app from the archive into an IPA
-```
+## Current deployment scope
 
-The resulting IPA has no signature and must be signed with a sideloading tool (Sideloadly, AltStore, TrollStore, etc.) before installation.
+The repository has no collaboration backend, roster authorization service, cloud queue, push service or image storage. Contacts, scout assignments, reports, plans, readiness and other work stay in the current workspace. CSV exports use the system file picker. An authenticated Google identity identifies a local workspace. Team invitations, remote roles and multi-device sharing require a trusted backend before they can be enabled.
 
-## Architecture
+The app uses the [original Team Hub app icon](https://github.com/FTC-wildcircuits/FTC-2026-2027/tree/main/FTCTeamHub/Assets.xcassets/AppIcon.appiconset) from the Wild Circuits team repository alongside the verified team name and number. A separate official team logo was unavailable.
 
-- MVVM
-- SwiftData models
-- `@Observable` view models
-- Native navigation only
-- Real network errors surfaced; no fake live data
+## References
+
+- [Official FIRST team profile](https://ftc-events.firstinspires.org/2026/team/36611)
+- [FIRST BIOBUZZ game rules](https://ftc-resources.firstinspires.org/ftc/game/manual-10)
+- [FTCScout API](https://ftcscout.org/api) and [provider implementation](https://github.com/ftc-scout/ftc-scout)
+- [Apple tab bars](https://developer.apple.com/design/human-interface-guidelines/tab-bars), [text fields](https://developer.apple.com/design/human-interface-guidelines/text-fields), [Apple Sports](https://support.apple.com/guide/apple-sports-app/apdec6a74b4c/web) and [Reminders](https://support.apple.com/guide/iphone/iph82596cb20/ios)
