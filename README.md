@@ -55,7 +55,7 @@ Take the staged build through sign-in, restoration, membership, chat, shared tas
 
 ## Native design and public FTC data
 
-The app uses native navigation, type, accessibility settings and appearance, with a compact team mark and restrained accent. Reminders' grouped work lists informed task filters. Apple's data-entry guidance informed grouped scouting controls and review before submission. The Mobbin public index was available, and individual screens were unavailable for review. The app mark matches the supplied team's app asset byte for byte. [Apple data entry](https://developer.apple.com/design/human-interface-guidelines/entering-data) · [Reminders lists](https://support.apple.com/en-mide/guide/iphone/iph2c6cf708e/ios) · [Mobbin iOS index](https://mobbin.com/discover/apps/ios) · [Team-owned app icon](https://github.com/FTC-wildcircuits/FTC-2026-2027/tree/main/FTCTeamHub/Assets.xcassets/AppIcon.appiconset)
+The app uses native navigation, type, accessibility settings and appearance, with a compact team mark and restrained accent. Reminders' grouped work lists informed task filters. Messages informed the bottom composer and inline retry. Apple Sports informed the transition from a compact score row to a match detail. Apple's data-entry guidance informed grouped scouting controls and review before submission. The Mobbin public index was available, and individual screens were unavailable for review. The app mark matches the supplied team's app asset byte for byte. [Reminders lists](https://support.apple.com/en-mide/guide/iphone/iph2c6cf708e/ios) · [Messages conversations](https://support.apple.com/guide/iphone/send-and-reply-to-messages-iph82fb73ba3/26/ios/26) · [Apple Sports schedules and scores](https://support.apple.com/en-au/guide/apple-sports-app/apd5a38547d1/web) · [Apple data entry](https://developer.apple.com/design/human-interface-guidelines/entering-data) · [Mobbin iOS index](https://mobbin.com/discover/apps/ios) · [Team-owned app icon](https://github.com/FTC-wildcircuits/FTC-2026-2027/tree/main/FTCTeamHub/Assets.xcassets/AppIcon.appiconset)
 
 FTCScout is the public provider. REST covers team identity, event matches and participation, and GraphQL covers connected event and roster queries. Identity keys use team number, provider season start year, uppercase event code and match ID. Match breakdowns are alliance totals and OPR is an external estimate. Scouting observations have their own source, sample and season. Failed refresh may use previously fetched public data with a fetch date. FIRST's API requires a username/token and has use restrictions, so this client uses FTCScout with no embedded FIRST credentials. The BIOBUZZ form follows the current FIRST game manual and preserves its schema identifier. [FTCScout API](https://ftcscout.org/api) · [FIRST API policy](https://ftc-events.firstinspires.org/services/API) · [BIOBUZZ game details](https://ftc-resources.firstinspires.org/ftc/game/manual-10)
 
@@ -80,6 +80,12 @@ firebase/node_modules/.bin/firebase emulators:exec --only firestore,auth --proje
 ```
 
 The collaboration tests cover invitation and tenant isolation, two independently authenticated emulator sessions, message and task delivery, offline update, duplicate reports, per-user votes, stock history and revocation. Release verification also needs a configured build, real accounts and a live Firestore project.
+
+On macOS, the simulator workflow seeds its own synthetic team and also tests two native Firebase iOS SDK sessions. It checks the SwiftData projection, chat delivery and restoration of the app's durable queue after reopening an offline workspace.
+
+```bash
+firebase/node_modules/.bin/firebase emulators:exec --only firestore,auth --project demo-ftcteamhub 'node firebase/seed-native.mjs && bash scripts/test-ios.sh'
+```
 
 ## Deferred work
 
