@@ -79,11 +79,16 @@ struct TeamProfileView: View {
                 if let appearances {
                     if appearances.value.isEmpty { Text("No season events listed.").foregroundStyle(.secondary) }
                     ForEach(appearances.value.sorted { $0.eventCode < $1.eventCode }) { participation in
-                        LabeledContent(participation.eventCode, value: participation.stats?.standingRank.map { "Rank \($0)" } ?? "Rank unavailable")
+                        NavigationLink {
+                            EventParticipationView(participation: participation)
+                        } label: {
+                            LabeledContent(participation.eventCode,
+                                           value: participation.stats?.standingRank.map { "Rank \($0)" } ?? "Rank unavailable")
+                        }
                     }
                 }
             }
-            Section("On-device Scouting") {
+            Section("Team Scouting") {
                 let reports = observations.filter { $0.submittedAt != nil }
                 LabeledContent("Saved match reports", value: String(reports.count))
                 if let pit = pits.first {

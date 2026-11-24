@@ -101,7 +101,19 @@ struct RobotIssueEditor: View {
                 Picker("Severity", selection: $severity) {
                     ForEach(IssueSeverity.allCases) { Text($0.rawValue).tag($0) }
                 }
-                TextField("Owner", text: $owner)
+                if let shared {
+                    Picker("Owner", selection: $owner) {
+                        Text("Unassigned").tag("")
+                        ForEach(shared.members.filter { $0.role != "viewer" }) { member in
+                            Text(member.name).tag(member.id)
+                        }
+                        if !owner.isEmpty && !shared.members.contains(where: { $0.id == owner && $0.role != "viewer" }) {
+                            Text("Previous owner").tag(owner)
+                        }
+                    }
+                } else {
+                    TextField("Owner", text: $owner)
+                }
                 if let label = match?.label ?? issue?.matchLabel {
                     LabeledContent("Related match", value: label)
                 }
@@ -132,7 +144,7 @@ struct RobotIssueEditor: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save", action: save)
-                    .disabled(title.trimmed.isEmpty || (status == .resolved && resolution.trimmed.isEmpty))
+                    .disabled(title.trimmed.isEmpty || (status == .resolved && resolution.trimmed.isEmpty) || shared?.team.canEdit == false)
             }
         }
         .onAppear {
@@ -144,8 +156,8 @@ struct RobotIssueEditor: View {
                 status = IssueStatus(rawValue: issue.status) ?? .open
                 owner = issue.owner
                 resolution = issue.resolution
-            } else if !auth.isDeviceWorkspace {
-                owner = auth.currentUser?.name ?? ""
+            } else if let shared {
+                owner = shared.uid
             }
         }
     }

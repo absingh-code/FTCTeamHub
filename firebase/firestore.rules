@@ -30,7 +30,7 @@ service cloud.firestore {
       let data = request.resource.data;
       let invite = invitePath(team, email());
       return data.keys().hasOnly(['name', 'role', 'active', 'joinedAt'])
-        && shortText(data.name, 1, 120)
+        && shortText(data.name, 1, 120) && data.name == request.auth.token.get('name', 'Team member')
         && data.role == get(invite).data.role && invitationRole(data.role)
         && get(invite).data.active == true
         && getAfter(invite).data.active == false && getAfter(invite).data.acceptedBy == uid
@@ -117,6 +117,16 @@ service cloud.firestore {
         && (data.kind != 'scoutAssignment' || data.deleted || get(memberPath(team, data.author)).data.active == true)
         && recordFields(team, data.kind, data.key, data.data, data.author);
     }
+    function recordPath(team, id) {
+      return /databases/$(database)/documents/workspaces/$(team)/records/$(id);
+    }
+    function stockQuantity(data) { return data.deleted ? 0 : data.data.quantity; }
+    function pairedStockChange(team, id, value, before) {
+      let revision = value.revision;
+      let change = getAfter(/databases/$(database)/documents/workspaces/$(team)/records/$(id)/stockChanges/$(revision)).data;
+      return change.before == before && change.after == stockQuantity(value)
+        && change.actor == request.auth.uid && change.createdAt == request.time;
+    }
     match /workspaceUsers/{uid}/memberships/{team} {
       allow read: if own(uid);
       allow create, update: if own(uid)
@@ -159,12 +169,26 @@ service cloud.firestore {
       match /records/{id} {
         allow read: if member(team);
         allow create: if writer(team) && record(team, id)
-          && request.resource.data.prior == '' && request.resource.data.deleted == false;
+          && request.resource.data.prior == '' && request.resource.data.deleted == false
+          && (request.resource.data.kind != 'inventory' || pairedStockChange(team, id, request.resource.data, 0));
         allow update: if writer(team) && record(team, id)
           && request.resource.data.prior == resource.data.revision
           && request.resource.data.revision != resource.data.revision
           && request.resource.data.kind == resource.data.kind
+          && (resource.data.kind != 'inventory' || stockQuantity(resource.data) == stockQuantity(request.resource.data)
+            || pairedStockChange(team, id, request.resource.data, stockQuantity(resource.data)))
           && (!attributed(resource.data.kind) || request.resource.data.author == resource.data.author);
+        match /stockChanges/{revision} {
+          allow read: if member(team);
+          allow create: if writer(team) && uuid(revision)
+            && request.resource.data.keys().hasOnly(['actor', 'before', 'after', 'createdAt'])
+            && request.resource.data.actor == request.auth.uid && request.resource.data.createdAt == request.time
+            && getAfter(recordPath(team, id)).data.kind == 'inventory'
+            && getAfter(recordPath(team, id)).data.revision == revision
+            && getAfter(recordPath(team, id)).data.updatedAt == request.time
+            && request.resource.data.before == (exists(recordPath(team, id)) ? stockQuantity(get(recordPath(team, id)).data) : 0)
+            && request.resource.data.after == stockQuantity(getAfter(recordPath(team, id)).data);
+        }
       }
       match /votes/{id} {
         allow read: if member(team);

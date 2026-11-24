@@ -2,6 +2,10 @@ import Foundation
 import Network
 import Observation
 
+enum ConnectionState {
+    case checking, available, offline
+}
+
 @MainActor
 @Observable
 final class CompetitionWorkspace {

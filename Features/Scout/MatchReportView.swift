@@ -5,7 +5,6 @@ struct MatchReportStart: View {
     let target: ScoutTarget
 
     @Environment(\.modelContext) private var context
-    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var report: MatchObservation?
@@ -88,7 +87,7 @@ struct MatchReportContent: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("The report returns to Draft status until you submit the correction.")
+                    Text("Teammates can still see your last submission while you edit.")
                 }
                 .alert("Couldn’t reopen", isPresented: Binding(
                     get: { error != nil }, set: { if !$0 { error = nil } }

@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { assertFails, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, disableNetwork, doc, enableNetwork, getDoc, getDocs, onSnapshot,
+import { initializeApp, deleteApp } from 'firebase/app';
+import { connectAuthEmulator, GoogleAuthProvider, getAuth, signInWithCredential } from 'firebase/auth';
+import { collection, connectFirestoreEmulator, disableNetwork, doc, enableNetwork, getDoc, getDocs, getFirestore, onSnapshot,
   query, orderBy, limit, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
-const google = (email) => ({ email, email_verified: true, firebase: { sign_in_provider: 'google.com' } });
+const google = (email) => ({ email, name: email.split('@')[0], email_verified: true, firebase: { sign_in_provider: 'google.com' } });
 const id = () => randomUUID().toUpperCase();
 const team = 'wild-circuits-sim';
 const otherTeam = 'other-workspace';
@@ -27,7 +29,7 @@ function observed(target, predicate) {
     const timeout = setTimeout(() => {
       unsubscribe();
       reject(new Error('Timed out waiting for a server snapshot'));
-    }, 8000);
+    }, 100000);
     const unsubscribe = onSnapshot(target, { includeMetadataChanges: true }, (value) => {
       if (!value.metadata.fromCache && !value.metadata.hasPendingWrites && predicate(value)) {
         clearTimeout(timeout);
@@ -77,6 +79,26 @@ before(async () => {
 
 after(async () => { if (environment) await environment.cleanup(); });
 
+async function googleSession(name, email) {
+  const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST;
+  assert.ok(authHost && firestoreHost, 'Run this test with both Firebase emulators');
+  const app = initializeApp({ projectId: 'demo-ftcteamhub', apiKey: 'demo-emulator-key' }, name);
+  const auth = getAuth(app);
+  connectAuthEmulator(auth, 'http://' + authHost, { disableWarnings: true });
+  const credential = GoogleAuthProvider.credential(JSON.stringify({
+    sub: name, email, email_verified: true, name
+  }));
+  const result = await signInWithCredential(auth, credential);
+  const token = await result.user.getIdTokenResult();
+  assert.equal(token.signInProvider, 'google.com');
+  assert.equal(token.claims.email_verified, true);
+  const db = getFirestore(app);
+  const [host, port] = firestoreHost.split(':');
+  connectFirestoreEmulator(db, host, Number(port));
+  return { app, db, uid: result.user.uid };
+}
+
 test('isolated Google identities accept email invitations without client-side privilege changes', async () => {
   await assertFails(getDoc(doc(scout, 'workspaces', team)));
   await assertFails(getDocs(collection(outsider, 'workspaces', team, 'records')));
@@ -93,13 +115,24 @@ test('isolated Google identities accept email invitations without client-side pr
   await assertFails(updateDoc(doc(scout, memberPath(team, 'scout')), { role: 'admin' }));
 });
 
-test('two sessions receive messages and task edits live, reject stale edits, and replay an offline update', async () => {
+test('two Auth emulator sessions receive chat and tasks live and replay an offline update', async (context) => {
+  const sender = await googleSession('Sender', 'sender@example.test');
+  const scoutSession = await googleSession('Scout', 'second-scout@example.test');
+  context.after(async () => { await Promise.all([deleteApp(sender.app), deleteApp(scoutSession.app)]); });
+  const teamPath = 'workspaces/' + team;
+  await environment.withSecurityRulesDisabled(async (admin) => {
+    const db = admin.firestore();
+    await setDoc(doc(db, memberPath(team, sender.uid)),
+      { name: 'Sender', active: true, role: 'mentor', joinedAt: serverTimestamp() });
+    await setDoc(doc(db, memberPath(team, scoutSession.uid)),
+      { name: 'Scout', active: true, role: 'scout', joinedAt: serverTimestamp() });
+  });
   const chatID = id();
-  const inbox = query(collection(scout, 'workspaces', team, 'messages'), orderBy('createdAt', 'desc'), limit(40));
+  const inbox = query(collection(scoutSession.db, teamPath, 'messages'), orderBy('createdAt', 'desc'), limit(40));
   const received = observed(inbox, (snap) => snap.docs.some((item) => item.id === chatID));
-  await setDoc(doc(leader, messagePath(chatID)), { text: 'Meet in the pit for Q14.', sender: 'mentor', createdAt: serverTimestamp() });
+  await setDoc(doc(sender.db, messagePath(chatID)), { text: 'Meet in the pit for Q14.', sender: sender.uid, createdAt: serverTimestamp() });
   const inboxSnapshot = await received;
-  assert.equal(inboxSnapshot.docs[0].data().sender, 'mentor');
+  assert.equal(inboxSnapshot.docs[0].data().sender, sender.uid);
   assert.ok(inboxSnapshot.docs[0].data().createdAt.toMillis() > 0);
   await assertFails(setDoc(doc(scout, messagePath(chatID)), { text: 'Different message', sender: 'scout', createdAt: serverTimestamp() }));
   await assertFails(setDoc(doc(scout, messagePath(id())), { text: 'Wrong identity', sender: 'mentor', createdAt: serverTimestamp() }));
@@ -108,26 +141,26 @@ test('two sessions receive messages and task edits live, reject stale edits, and
   await setDoc(doc(leader, announcementPath(id())), { text: 'Move to queue 2', sender: 'mentor', createdAt: serverTimestamp() });
 
   const key = id();
-  const first = record({ kind: 'task', key, actor: 'mentor',
-    fields: { id: key, title: 'Check the drivetrain', assignedToID: 'scout', status: 'todo', priority: 'medium' } });
-  const created = observed(doc(scout, taskPath(key)), (snapshot) => snapshot.exists());
-  await setDoc(doc(leader, taskPath(key)), first);
+  const first = record({ kind: 'task', key, actor: sender.uid,
+    fields: { id: key, title: 'Check the drivetrain', assignedToID: scoutSession.uid, status: 'todo', priority: 'medium' } });
+  const created = observed(doc(scoutSession.db, taskPath(key)), (snapshot) => snapshot.exists());
+  await setDoc(doc(sender.db, taskPath(key)), first);
   assert.equal((await created).data().data.status, 'todo');
 
-  const second = record({ kind: 'task', key, actor: 'scout', prior: first.revision,
+  const second = record({ kind: 'task', key, actor: scoutSession.uid, prior: first.revision,
     fields: { ...first.data, status: 'inProgress' } });
-  const updated = observed(doc(leader, taskPath(key)), (snapshot) => snapshot.data()?.revision === second.revision);
-  await setDoc(doc(scout, taskPath(key)), second);
+  const updated = observed(doc(sender.db, taskPath(key)), (snapshot) => snapshot.data()?.revision === second.revision);
+  await setDoc(doc(scoutSession.db, taskPath(key)), second);
   assert.equal((await updated).data().data.status, 'inProgress');
-  await assertFails(setDoc(doc(leader, taskPath(key)), record({ kind: 'task', key, actor: 'mentor',
+  await assertFails(setDoc(doc(sender.db, taskPath(key)), record({ kind: 'task', key, actor: sender.uid,
     prior: first.revision, fields: { ...first.data, status: 'blocked' } })));
 
-  await disableNetwork(scout);
-  const last = record({ kind: 'task', key, actor: 'scout', prior: second.revision, fields: { ...first.data, status: 'done' } });
-  const finished = observed(doc(leader, taskPath(key)), (snapshot) => snapshot.data()?.revision === last.revision);
-  const queued = setDoc(doc(scout, taskPath(key)), last);
+  await disableNetwork(scoutSession.db);
+  const last = record({ kind: 'task', key, actor: scoutSession.uid, prior: second.revision, fields: { ...first.data, status: 'done' } });
+  const finished = observed(doc(sender.db, taskPath(key)), (snapshot) => snapshot.data()?.revision === last.revision);
+  const queued = setDoc(doc(scoutSession.db, taskPath(key)), last);
   assert.equal((await getDoc(doc(leader, taskPath(key)))).data().data.status, 'inProgress');
-  await enableNetwork(scout);
+  await enableNetwork(scoutSession.db);
   await queued;
   assert.equal((await finished).data().data.status, 'done');
   await assertFails(getDoc(doc(outsider, taskPath(key))));

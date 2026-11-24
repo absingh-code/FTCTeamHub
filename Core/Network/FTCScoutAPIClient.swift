@@ -57,6 +57,10 @@ actor FTCScoutAPIClient {
         let eventByCode: FTCRoster?
     }
 
+    private struct EventQuery: Decodable {
+        let eventByCode: FTCEvent?
+    }
+
     init(session: URLSession = .shared, cacheDirectory: URL? = FileManager.default.urls(
          for: .cachesDirectory, in: .userDomainMask
     ).first?.appendingPathComponent("FTCScout-v1", isDirectory: true)) {
@@ -94,6 +98,24 @@ actor FTCScoutAPIClient {
             else { throw ScoutAPIError.badData }
             var seen = Set<Int>()
             return matches.filter { seen.insert($0.id).inserted }.sorted { $0.id < $1.id }
+        }
+    }
+
+    func event(season: Int, code: String, refresh: Bool = false) async throws -> ScoutFeed<FTCEvent> {
+        let canonicalCode = code.uppercased()
+        let request = try graphRequest(query: """
+            query EventDetails($season: Int!, $code: String!) {
+              eventByCode(season: $season, code: $code) {
+                season code name start end timezone location { venue city state }
+              }
+            }
+            """, variables: ["season": season, "code": canonicalCode])
+        return try await load("event:\(season):\(canonicalCode)", request, refresh: refresh) { data in
+            let response = try JSONDecoder().decode(GraphQL<EventQuery>.self, from: data)
+            guard response.errors?.isEmpty != false else { throw ScoutAPIError.badData }
+            guard let event = response.data?.eventByCode else { throw ScoutAPIError.unavailable }
+            guard event.season == season, event.code.uppercased() == canonicalCode else { throw ScoutAPIError.badData }
+            return event
         }
     }
 

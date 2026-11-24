@@ -195,7 +195,7 @@ private struct AnnouncementForm: View {
                             try workspace.enqueueMessage(text, announcement: true, link: link.trimmed.isEmpty ? nil : link.trimmed)
                             dismiss()
                         } catch let issue as WorkspaceError { error = issue.localizedDescription }
-                        catch { error = "Couldn’t save the announcement for sending." }
+                        catch { self.error = "Couldn’t save the announcement for sending." }
                     }
                     .disabled(text.trimmed.isEmpty)
                 }

@@ -132,13 +132,20 @@ struct InventoryEditor: View {
             if item != nil {
                 Section { Button("Delete Part", role: .destructive) { deleteConfirm = true } }
             }
+            if let item, let shared {
+                Section("Stock History") {
+                    NavigationLink("View Recent Changes") {
+                        StockHistoryView(item: item, workspace: shared)
+                    }
+                }
+            }
             FormSaveError(message: error)
         }
         .navigationTitle(item == nil ? "Add Part" : "Part Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save", action: save).disabled(name.trimmed.isEmpty)
+                Button("Save", action: save).disabled(name.trimmed.isEmpty || shared?.team.canEdit == false)
             }
             if item == nil {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -180,5 +187,46 @@ struct InventoryEditor: View {
             context.rollback()
             self.error = "Couldn’t update inventory. Your edits are still here."
         }
+    }
+}
+
+private struct StockHistoryView: View {
+    let item: InventoryItem
+    let workspace: SharedWorkspace
+    @State private var changes: [StockChange]?
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            if let error {
+                DataNotice(title: "History unavailable", detail: error, icon: "clock.arrow.circlepath") {
+                    Task { await load() }
+                }
+            }
+            if let changes {
+                if changes.isEmpty { Text("No quantity changes recorded.").foregroundStyle(.secondary) }
+                ForEach(changes) { change in
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                        Text("\(change.before) → \(change.after) in stock").font(.headline)
+                        Text(workspace.members.first { $0.id == change.actor }?.name ?? "Former or unavailable member")
+                        Text(change.date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.subheadline)
+                    .accessibilityElement(children: .combine)
+                }
+            } else if error == nil {
+                ProgressView("Loading stock history")
+            }
+        }
+        .navigationTitle(item.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        do { changes = try await workspace.stockChanges(item: item.id); error = nil }
+        catch { self.error = "Connect to the team workspace and try again." }
     }
 }

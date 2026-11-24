@@ -22,6 +22,14 @@ struct WorkspaceMessage: Identifiable, Equatable {
     enum Delivery: Equatable { case sending, sent, failed }
 }
 
+struct StockChange: Identifiable {
+    let id: String
+    let actor: String
+    let before: Int
+    let after: Int
+    let date: Date
+}
+
 struct PendingWorkspaceWrite: Identifiable, Codable {
     let id: String
     let created: Date
@@ -254,6 +262,18 @@ final class SharedWorkspace {
                                "updatedAt": FieldValue.serverTimestamp()])
     }
 
+    func stockChanges(item: UUID) async throws -> [StockChange] {
+        let id = SharedRecord.id(.inventory, item.uuidString)
+        let result = try await tenant.collection("records").document(id).collection("stockChanges")
+            .order(by: "createdAt", descending: true).limit(to: 25).getDocuments(source: .server)
+        return result.documents.compactMap { doc in
+            guard let actor = doc.get("actor") as? String,
+                  let before = doc.get("before") as? Int, let after = doc.get("after") as? Int,
+                  let time = doc.get("createdAt") as? Timestamp else { return nil }
+            return StockChange(id: doc.documentID, actor: actor, before: before, after: after, date: time.dateValue())
+        }
+    }
+
     func reconnect() {
         guard running else { return }
         listeners.forEach { $0.remove() }
@@ -262,7 +282,7 @@ final class SharedWorkspace {
         start()
     }
 
-    private var messageQuery: Query {
+    private var messageQuery: FirebaseFirestore.Query {
         tenant.collection("messages").order(by: "createdAt", descending: true)
             .order(by: FieldPath.documentID(), descending: true)
     }
@@ -401,13 +421,31 @@ final class SharedWorkspace {
             guard cloudRevision == write.prior else {
                 throw WorkspaceError.message("A teammate changed this record. Open Sync to review the pending edit.")
             }
-            let data = try JSONSerialization.jsonObject(with: record.payload)
-            try await doc.setData([
+            guard let data = try JSONSerialization.jsonObject(with: record.payload) as? [String: Any] else {
+                throw WorkspaceError.message("Couldn’t read the outgoing record.")
+            }
+            let envelope: [String: Any] = [
                 "kind": record.kind.rawValue, "key": record.key,
                 "author": record.author ?? uid, "actor": uid,
                 "revision": write.id, "prior": write.prior ?? "",
                 "deleted": write.deleted, "data": data, "updatedAt": FieldValue.serverTimestamp()
-            ])
+            ]
+            if record.kind == .inventory, let quantity = data["quantity"] as? Int {
+                let previousData = existing.get("data") as? [String: Any]
+                let before = existing.get("deleted") as? Bool == true ? 0 : previousData?["quantity"] as? Int ?? 0
+                let after = write.deleted ? 0 : quantity
+                if before != after || !existing.exists {
+                    let batch = db.batch()
+                    batch.setData(envelope, forDocument: doc)
+                    batch.setData(["actor": uid, "before": before, "after": after, "createdAt": FieldValue.serverTimestamp()],
+                                  forDocument: doc.collection("stockChanges").document(write.id))
+                    try await batch.commit()
+                } else {
+                    try await doc.setData(envelope)
+                }
+            } else {
+                try await doc.setData(envelope)
+            }
             revisions[record.id] = write.id
         } else if !existing.exists, let text = write.text {
             var data: [String: Any] = ["sender": uid, "text": text, "createdAt": FieldValue.serverTimestamp()]

@@ -9,11 +9,13 @@ struct MatchDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.teamWorkspace) private var shared
     @Environment(AuthenticationViewModel.self) private var auth
+    @Environment(CompetitionWorkspace.self) private var competition
     @Query private var assignments: [ScoutAssignment]
     @Query private var observations: [MatchObservation]
     @State private var target: ScoutTarget?
     @State private var showPlan = false
     @State private var showIssue = false
+    @State private var assignmentTeam: ScoutTarget?
     @State private var saveError: String?
 
     init(event: FTCEvent, match: FTCMatch, directory: TeamDirectory) {
@@ -29,6 +31,13 @@ struct MatchDetailView: View {
         List {
             Section(event.name) {
                 MatchRow(match: match, zone: event.zone)
+                if let scores = match.scores, match.isPlayed {
+                    if let red = scores.red, let blue = scores.blue {
+                        LabeledContent("Auto · red / blue", value: score(red.autoPoints, blue.autoPoints))
+                        LabeledContent("TeleOp · red / blue", value: score(red.dcPoints, blue.dcPoints))
+                        LabeledContent("Non-penalty · red / blue", value: score(red.totalPointsNp, blue.totalPointsNp))
+                    }
+                }
                 if match.teamNumbers.isEmpty {
                     Text("The provider hasn’t published alliance assignments.").foregroundStyle(.secondary)
                 }
@@ -38,30 +47,32 @@ struct MatchDetailView: View {
                     ForEach(match.competitors.filter { $0.alliance.lowercased() != "solo" && $0.teamNumber > 0 },
                             id: \.teamNumber) { entry in
                         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                            Text(directory.label(entry.teamNumber)).font(.headline)
+                            NavigationLink {
+                                let detail = competition.detail
+                                TeamProfileView(number: entry.teamNumber, event: event, directory: directory,
+                                    stats: competition.selected?.id == event.id
+                                        ? detail?.standings?.value.first { $0.teamNumber == entry.teamNumber }?.stats : nil,
+                                    matches: competition.selected?.id == event.id ? detail?.matches?.value ?? [match] : [match])
+                            } label: {
+                                Text(directory.label(entry.teamNumber)).font(.headline)
+                            }
                             Text(entry.alliance.capitalized + (entry.noShow == true ? " · No show" : "") +
                                  (entry.dq == true ? " · Disqualified" : "") +
                                  (entry.surrogate == true ? " · Surrogate" : ""))
                                 .font(.footnote).foregroundStyle(.secondary)
-                            HStack {
-                                Button {
-                                    target = ScoutTarget(match: match, team: entry.teamNumber)
-                                } label: {
-                                    Label(scoutLabel(entry.teamNumber), systemImage: "square.and.pencil")
-                                }
-                                .buttonStyle(.bordered)
-                                if let user = auth.currentUser, entry.teamNumber != auth.team?.number {
-                                    let assigned = assignments.contains { $0.team == entry.teamNumber && $0.author == user.id }
-                                    Button {
-                                        toggleAssignment(team: entry.teamNumber, author: user.id)
-                                    } label: {
-                                        Label(assigned ? "Assigned" : "Assign to Me", systemImage: assigned ? "checkmark.circle.fill" : "person.badge.plus")
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .accessibilityHint(assigned ? "Removes your assignment" : "Adds this team to your scouting assignments")
-                                }
+                            ViewThatFits(in: .horizontal) {
+                                HStack { scoutingActions(entry.teamNumber) }
+                                VStack(alignment: .leading) { scoutingActions(entry.teamNumber) }
                             }
                             .controlSize(.large)
+                            if shared?.team.canCoordinate == true {
+                                Button {
+                                    assignmentTeam = ScoutTarget(match: match, team: entry.teamNumber)
+                                } label: {
+                                    Label("Manage Assignments", systemImage: "person.2")
+                                }
+                                .buttonStyle(.borderless)
+                            }
                             .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.vertical, DS.Spacing.xs)
@@ -95,8 +106,53 @@ struct MatchDetailView: View {
         .navigationTitle(match.label)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $target) { MatchReportStart(target: $0) }
+        .sheet(item: $assignmentTeam) { target in
+            if let shared {
+                NavigationStack {
+                    List {
+                        ForEach(shared.members.filter { $0.role != "viewer" }) { member in
+                            let assigned = assignments.contains { $0.team == target.team && $0.author == member.id }
+                            Button {
+                                toggleAssignment(team: target.team, author: member.id)
+                            } label: {
+                                LabeledContent(member.name, value: assigned ? "Assigned" : "Available")
+                            }
+                        }
+                        FormSaveError(message: saveError)
+                    }
+                    .navigationTitle("Scouts for #\(target.team)")
+                    .toolbar { Button("Done") { assignmentTeam = nil } }
+                }
+            }
+        }
         .sheet(isPresented: $showPlan) { MatchPlanEditor(event: event, match: match, directory: directory) }
         .sheet(isPresented: $showIssue) { RobotIssueFormSheet(match: match) }
+    }
+
+    @ViewBuilder
+    private func scoutingActions(_ number: Int) -> some View {
+        Button {
+            target = ScoutTarget(match: match, team: number)
+        } label: {
+            Label(scoutLabel(number), systemImage: "square.and.pencil")
+        }
+        .buttonStyle(.bordered)
+        .disabled(shared?.team.canEdit == false)
+        if let user = auth.currentUser, number != auth.team?.number, shared?.team.canEdit != false {
+            let assigned = assignments.contains { $0.team == number && $0.author == user.id }
+            Button {
+                toggleAssignment(team: number, author: user.id)
+            } label: {
+                Label(assigned ? "Assigned" : "Assign to Me",
+                      systemImage: assigned ? "checkmark.circle.fill" : "person.badge.plus")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityHint(assigned ? "Removes your assignment" : "Adds this robot to your scouting assignments")
+        }
+    }
+
+    private func score(_ red: Int?, _ blue: Int?) -> String {
+        [red, blue].map { $0.map(String.init) ?? "—" }.joined(separator: " / ")
     }
 
     private func scoutLabel(_ number: Int) -> String {

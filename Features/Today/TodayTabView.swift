@@ -37,6 +37,17 @@ struct TodayTabView: View {
                                 .padding(.vertical, DS.Spacing.sm)
                         }
                     }
+                    if let shared, !shared.online || !shared.pending.isEmpty {
+                        NavigationLink {
+                            SyncStatusView(workspace: shared)
+                        } label: {
+                            Label(shared.online ? "\(shared.pending.count) waiting to sync" : "Working offline",
+                                  systemImage: shared.online ? "arrow.trianglehead.clockwise" : "wifi.slash")
+                                .font(.subheadline)
+                        }
+                    }
+                }
+                Section("Competition") {
                     if let event = competition.selected, event.isCurrent || competition.upcomingMatch != nil {
                         competitionSummary(event)
                     } else {
@@ -82,9 +93,11 @@ struct TodayTabView: View {
                     Button("See Team Tasks", systemImage: "arrow.right") { openTab(.work) }
                 }
                 Section("Quick Actions") {
-                    Button("Scout a Match", systemImage: "binoculars") { openTab(.scout) }
-                    Button("Report a Robot Issue", systemImage: "wrench.and.screwdriver") { addingIssue = true }
-                    Button("Add a Task", systemImage: "plus") { addingTask = true }
+                    if shared?.team.canEdit != false {
+                        Button("Scout a Match", systemImage: "binoculars") { openTab(.scout) }
+                        Button("Report a Robot Issue", systemImage: "wrench.and.screwdriver") { addingIssue = true }
+                        Button("Add a Task", systemImage: "plus") { addingTask = true }
+                    }
                     NavigationLink {
                         ChecklistHub(match: competition.upcomingMatch, event: competition.selected)
                     } label: {
@@ -93,7 +106,7 @@ struct TodayTabView: View {
                 }
                 let upcoming = localEvents.filter { $0.date >= Calendar.current.startOfDay(for: .now) }
                 if !upcoming.isEmpty {
-                    Section("Local Team Events") {
+                    Section("Team Events") {
                         ForEach(upcoming.prefix(4)) { event in
                             NavigationLink {
                                 List {
