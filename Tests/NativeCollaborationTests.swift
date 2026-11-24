@@ -7,11 +7,13 @@ import XCTest
 @testable import FTCTeamHub
 
 final class NativeCollaborationTests: XCTestCase {
+    private let emulatorHost = "localhost"
+
     @MainActor
     func testNativeClientsShareRecordsAndReplayDurableOutbox() async throws {
-        let endpoint = URL(string: "http://127.0.0.1:9099/")!
+        let endpoint = URL(string: "http://\(emulatorHost):9099/")!
         var request = URLRequest(url: endpoint)
-        request.timeoutInterval = 2
+        request.timeoutInterval = 8
         guard let (body, _) = try? await URLSession.shared.data(for: request),
               String(decoding: body, as: UTF8.self).localizedCaseInsensitiveContains("emulator") else {
             throw XCTSkip("The Firebase Authentication emulator is required for native collaboration.")
@@ -67,13 +69,13 @@ final class NativeCollaborationTests: XCTestCase {
         FirebaseApp.configure(name: instance, options: options)
         let app = try XCTUnwrap(FirebaseApp.app(name: instance))
         let auth = Auth.auth(app: app)
-        auth.useEmulator(withHost: "127.0.0.1", port: 9099)
+        auth.useEmulator(withHost: emulatorHost, port: 9099)
         let claims = ["sub": name, "email": name + "@example.test", "email_verified": true, "name": name] as [String: Any]
         let token = String(decoding: try JSONSerialization.data(withJSONObject: claims), as: UTF8.self)
         let result = try await auth.signIn(with: GoogleAuthProvider.credential(withIDToken: token, accessToken: ""))
         XCTAssertTrue(result.user.isEmailVerified)
         let db = Firestore.firestore(app: app)
-        db.useEmulator(withHost: "127.0.0.1", port: 8080)
+        db.useEmulator(withHost: emulatorHost, port: 8080)
         let settings = db.settings
         settings.cacheSettings = MemoryCacheSettings()
         db.settings = settings

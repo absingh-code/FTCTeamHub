@@ -6,12 +6,14 @@ xcodegen generate
 mkdir -p build/test
 result="$PWD/build/test/FTCTeamHub.xcresult"
 device="$(xcrun simctl list devices available -j | python3 -c '
-import json, sys
+import json, sys, os
 devices = json.load(sys.stdin)["devices"]
+runtime_filter = os.getenv("FTCTEAMHUB_SIMULATOR_RUNTIME")
 iphones = [d for runtime in sorted(devices, reverse=True) for d in devices[runtime]
-           if runtime.split(".")[-1].startswith("iOS-") and d["name"].startswith("iPhone")]
+           if runtime.split(".")[-1].startswith("iOS-") and d["name"].startswith("iPhone")
+           and (not runtime_filter or runtime.split(".")[-1] == runtime_filter)]
 if not iphones:
-    sys.exit("No iPhone simulator runtime available")
+    sys.exit("No matching iPhone simulator runtime available")
 print(iphones[0]["udid"])
 ')"
 if [[ -e "$result" ]]; then

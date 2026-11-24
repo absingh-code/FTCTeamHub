@@ -58,9 +58,12 @@ jobs:
       - name: Install XcodeGen
         run: command -v xcodegen >/dev/null || brew install xcodegen
       - name: Run iOS unit and smoke tests
+        env:
+          FTCTEAMHUB_SIMULATOR_RUNTIME: iOS-26-2
         run: |
           pnpm --dir firebase install --frozen-lockfile --ignore-scripts
-          firebase/node_modules/.bin/firebase emulators:exec --only firestore,auth --project demo-ftcteamhub 'node firebase/seed-native.mjs && bash scripts/test-ios.sh'
+          /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true' Resources/Info.plist
+          firebase/node_modules/.bin/firebase emulators:exec --only firestore,auth --project demo-ftcteamhub 'curl -fsS --max-time 8 http://localhost:9099/ && node firebase/seed-native.mjs && bash scripts/test-ios.sh'
           grep -E 'testNativeClientsShareRecordsAndReplayDurableOutbox.*passed' build/test/xcodebuild-test.log
       - name: Upload simulator screenshots and test log
         if: always()
