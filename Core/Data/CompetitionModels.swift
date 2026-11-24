@@ -76,6 +76,34 @@ final class MatchObservation {
         [autoHiveTips, teleopHiveTips, gardenPieces, flowerPlacements].contains { $0 != nil } ||
         [autoNotes, teleopNotes, reliabilityNotes, notes].contains { !$0.trimmed.isEmpty }
     }
+
+    init(remoteIdentity identity: String, matchKey: String, eventCode: String, season: Int, providerID: Int, matchLabel: String, team: Int, author: String, schemaVersion: Int, created: Date, updated: Date, submittedAt: Date?, autoHiveTips: Int?, teleopHiveTips: Int?, gardenPieces: Int?, flowerPlacements: Int?, autoLeave: String, autoPark: String, finalPark: String, stopped: String, autoNotes: String, teleopNotes: String, reliabilityNotes: String, notes: String) {
+        self.identity = identity
+        self.matchKey = matchKey
+        self.eventCode = eventCode
+        self.season = season
+        self.providerID = providerID
+        self.matchLabel = matchLabel
+        self.team = team
+        self.author = author
+        self.schemaVersion = schemaVersion
+        self.created = created
+        self.updated = updated
+        self.submittedAt = submittedAt
+        self.autoHiveTips = autoHiveTips
+        self.teleopHiveTips = teleopHiveTips
+        self.gardenPieces = gardenPieces
+        self.flowerPlacements = flowerPlacements
+        self.autoLeave = autoLeave
+        self.autoPark = autoPark
+        self.finalPark = finalPark
+        self.stopped = stopped
+        self.autoNotes = autoNotes
+        self.teleopNotes = teleopNotes
+        self.reliabilityNotes = reliabilityNotes
+        self.notes = notes
+    }
+
 }
 
 @Model
@@ -117,6 +145,24 @@ final class PitObservation {
     var isComplete: Bool {
         !drivetrain.trimmed.isEmpty && !autonomous.trimmed.isEmpty && !reliability.trimmed.isEmpty
     }
+
+    init(remoteId id: UUID, team: Int, season: Int, eventCode: String, author: String, created: Date, drivetrain: String, mechanisms: String, autonomous: String, startPositions: String, capabilities: String, dimensions: String, reliability: String, notes: String) {
+        self.id = id
+        self.team = team
+        self.season = season
+        self.eventCode = eventCode
+        self.author = author
+        self.created = created
+        self.drivetrain = drivetrain
+        self.mechanisms = mechanisms
+        self.autonomous = autonomous
+        self.startPositions = startPositions
+        self.capabilities = capabilities
+        self.dimensions = dimensions
+        self.reliability = reliability
+        self.notes = notes
+    }
+
 }
 
 @Model
@@ -138,6 +184,17 @@ final class ScoutAssignment {
         self.author = author
         scheduled = match.scheduledDate
     }
+
+    init(remoteIdentity identity: String, author: String, team: Int, matchKey: String, matchLabel: String, eventCode: String, scheduled: Date?) {
+        self.identity = identity
+        self.author = author
+        self.team = team
+        self.matchKey = matchKey
+        self.matchLabel = matchLabel
+        self.eventCode = eventCode
+        self.scheduled = scheduled
+    }
+
 }
 
 enum IssueSeverity: String, CaseIterable, Identifiable {
@@ -204,6 +261,22 @@ final class RobotIssue {
     }
 
     var isOpen: Bool { status != IssueStatus.resolved.rawValue }
+
+    init(remoteId id: UUID, title: String, detail: String, subsystem: String, severity: String, status: String, owner: String, created: Date, updated: Date, matchKey: String?, matchLabel: String?, resolution: String) {
+        self.id = id
+        self.title = title
+        self.detail = detail
+        self.subsystem = subsystem
+        self.severity = severity
+        self.status = status
+        self.owner = owner
+        self.created = created
+        self.updated = updated
+        self.matchKey = matchKey
+        self.matchLabel = matchLabel
+        self.resolution = resolution
+    }
+
 }
 
 @Model
@@ -248,6 +321,21 @@ final class ChecklistRun {
     var readyToComplete: Bool {
         !items.isEmpty && items.indices.allSatisfy { completedIndices.contains($0) }
     }
+
+    init(remoteId id: UUID, templateKey: String, title: String, items: [String], completedIndices: [Int], matchKey: String?, matchLabel: String?, eventID: String?, started: Date, completed: Date?, completedBy: String?) {
+        self.id = id
+        self.templateKey = templateKey
+        self.title = title
+        self.items = items
+        self.completedIndices = completedIndices
+        self.matchKey = matchKey
+        self.matchLabel = matchLabel
+        self.eventID = eventID
+        self.started = started
+        self.completed = completed
+        self.completedBy = completedBy
+    }
+
 }
 
 struct ChecklistDefinition: Identifiable {

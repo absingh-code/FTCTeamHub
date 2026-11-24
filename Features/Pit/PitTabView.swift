@@ -32,7 +32,7 @@ struct PitTabView: View {
                     }
                 }
                 Section {
-                    Text("Issues, inspection notes and checklist runs are saved in your workspace on this device.")
+                    Text("Issue progress and readiness runs are visible to teammates after they sync.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -106,6 +106,7 @@ struct InventoryEditor: View {
     var item: InventoryItem?
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var quantity = 1
@@ -173,7 +174,7 @@ struct InventoryEditor: View {
 
     private func persist() {
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()

@@ -7,6 +7,7 @@ struct PitReportEditor: View {
     var previous: PitObservation?
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
 
@@ -83,7 +84,7 @@ struct PitReportEditor: View {
                                    reliability: reliability.trimmed, notes: notes.trimmed)
         context.insert(entry)
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()

@@ -5,7 +5,8 @@ import Observation
 @MainActor
 @Observable
 final class CompetitionWorkspace {
-    static let teamNumber = 36611
+    let teamNumber: Int
+    private let selectionScope: String
     static let seasons = Array((2019...2026).reversed())
     var season = 2026 {
         didSet {
@@ -27,7 +28,9 @@ final class CompetitionWorkspace {
     private(set) var connection = ConnectionState.checking
     private let monitor = NWPathMonitor()
 
-    init() {
+    init(teamNumber: Int = 36611, scope: String = "preview") {
+        self.teamNumber = teamNumber
+        selectionScope = scope
         monitor.pathUpdateHandler = { [weak self] path in
             let state: ConnectionState = path.status == .satisfied ? .available : .offline
             Task { @MainActor in self?.connection = state }
@@ -62,7 +65,7 @@ final class CompetitionWorkspace {
     var upcomingMatch: FTCMatch? {
         detail?.matches?.value.filter { match in
             !match.isPlayed && match.actualDate == nil &&
-            match.teamNumbers.contains(Self.teamNumber) &&
+            match.teamNumbers.contains(teamNumber) &&
             (match.scheduledDate.map { $0 >= .now } ?? true)
         }
         .min { ($0.scheduledDate ?? .distantFuture, $0.id) < ($1.scheduledDate ?? .distantFuture, $1.id) }
@@ -72,7 +75,7 @@ final class CompetitionWorkspace {
         guard event.id != selected?.id else { return }
         detail = nil
         selected = event
-        UserDefaults.standard.set(event.id, forKey: "competition-selection-\(event.season)")
+        UserDefaults.standard.set(event.id, forKey: selectionKey(event.season))
     }
 
     func loadEvents(refresh: Bool = false) async {
@@ -84,13 +87,13 @@ final class CompetitionWorkspace {
         defer { if eventRequest == request { loadingEvents = false } }
 
         do {
-            let feed = try await api.events(team: Self.teamNumber, season: year, refresh: refresh)
+            let feed = try await api.events(team: teamNumber, season: year, refresh: refresh)
             guard request == eventRequest, year == season else { return }
             events = feed
             if let matching = feed.value.first(where: { $0.id == selected?.id }) {
                 selected = matching
             } else {
-                let pref = UserDefaults.standard.string(forKey: "competition-selection-\(year)")
+                let pref = UserDefaults.standard.string(forKey: selectionKey(year))
                 let choice = feed.value.first { $0.id == pref }
                     ?? feed.value.first { $0.isCurrent }
                     ?? feed.value.first { ($0.firstDay ?? "") >= Date.now.formatted(.iso8601.year().month().day()) }
@@ -107,6 +110,8 @@ final class CompetitionWorkspace {
             eventError = error.localizedDescription
         }
     }
+
+    private func selectionKey(_ year: Int) -> String { "event-\(selectionScope)-\(year)" }
 
     func loadSelected(refresh: Bool = false) async {
         let request = UUID()

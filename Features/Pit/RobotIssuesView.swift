@@ -78,6 +78,7 @@ struct RobotIssueEditor: View {
     var issue: RobotIssue?
     var match: FTCMatch?
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var title = ""
@@ -166,7 +167,7 @@ struct RobotIssueEditor: View {
                                       match: match, resolution: resolution.trimmed))
         }
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()

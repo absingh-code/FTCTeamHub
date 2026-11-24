@@ -28,6 +28,7 @@ struct ReviewMatchReport: View {
     let report: MatchObservation
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @State private var error: String?
 
@@ -35,9 +36,9 @@ struct ReviewMatchReport: View {
         List {
             ReportSummarySections(report: report)
             Section {
-                Button("Submit on This Device", action: submit)
+                Button(shared == nil ? "Save Report" : "Submit to Team", action: submit)
                     .buttonStyle(.borderedProminent)
-                    .disabled(report.submittedAt != nil || !report.hasObservations)
+                    .disabled(report.submittedAt != nil || !report.hasObservations || shared?.team.canEdit == false)
                 FormSaveError(message: error)
             }
         }
@@ -50,7 +51,7 @@ struct ReviewMatchReport: View {
         report.submittedAt = .now
         report.updated = .now
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()
@@ -61,12 +62,13 @@ struct ReviewMatchReport: View {
 
 private struct ReportSummarySections: View {
     let report: MatchObservation
+    @Environment(\.teamWorkspace) private var shared
 
     var body: some View {
         Section {
             ReportHeading(report: report)
             if let submitted = report.submittedAt {
-                LabeledContent("Saved on device", value: submitted.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent(shared?.reportDelivery(report.identity) ?? "Saved on device", value: submitted.formatted(date: .abbreviated, time: .shortened))
             } else {
                 Label("Draft", systemImage: "pencil")
             }

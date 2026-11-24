@@ -98,9 +98,10 @@ private struct TasksListView: View {
 struct TaskEditor: View {
     var task: TaskItem?
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
-    @Query(sort: \AppUser.name) private var members: [AppUser]
+    private var members: [AppUser] { shared?.members ?? [] }
     @State private var title = ""
     @State private var assignee: String?
     @State private var status = "todo"
@@ -157,7 +158,7 @@ struct TaskEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Save", action: save).disabled(title.trimmed.isEmpty)
+                Button("Save", action: save).disabled(title.trimmed.isEmpty || shared?.team.canEdit == false)
             }
         }
         .onAppear {
@@ -185,7 +186,7 @@ struct TaskEditor: View {
         item.tags = category.split(separator: ",").map { String($0).trimmed }.filter { !$0.isEmpty }
         item.notes = notes.trimmed.isEmpty ? nil : notes.trimmed
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()

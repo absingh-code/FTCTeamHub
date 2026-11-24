@@ -46,6 +46,21 @@ enum WorkspaceStore {
         return try ModelContainer(for: current, configurations: [config])
     }
 
+    static func sharedFolder(project: String, team: String, uid: String) throws -> URL {
+        let scope = [project, uid, team].map { "\($0.utf8.count):\($0)" }.joined()
+        let digest = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
+        var folder = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                appropriateFor: nil, create: true)
+            .appendingPathComponent("SharedWorkspaces-v1", isDirectory: true)
+            .appendingPathComponent(digest, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var resources = URLResourceValues()
+        resources.isExcludedFromBackup = true
+        try folder.setResourceValues(resources)
+        return folder
+    }
+
     static func legacyBelongs(to userID: String, configuration: ModelConfiguration) throws -> Bool {
         let original = try ModelContainer(for: legacy, configurations: [configuration])
         let db = original.mainContext

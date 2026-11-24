@@ -5,6 +5,7 @@ struct MatchReportStart: View {
     let target: ScoutTarget
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var report: MatchObservation?
@@ -59,6 +60,7 @@ struct MatchReportContent: View {
     let report: MatchObservation
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var reopen = false
     @State private var error: String?
@@ -69,14 +71,14 @@ struct MatchReportContent: View {
         } else {
             MatchReportSummary(report: report)
                 .toolbar {
-                    if report.author == auth.currentUser?.id {
+                    if report.author == auth.currentUser?.id && shared?.team.canEdit != false {
                         ToolbarItem(placement: .primaryAction) {
                             Button("Correct") { reopen = true }
                         }
                     }
                 }
-                .confirmationDialog("Reopen this report as a draft?", isPresented: $reopen, titleVisibility: .visible) {
-                    Button("Reopen as Draft") {
+                .confirmationDialog("Edit this report as a private draft?", isPresented: $reopen, titleVisibility: .visible) {
+                    Button("Edit a Draft Copy") {
                         report.submittedAt = nil
                         do { try context.save() }
                         catch {

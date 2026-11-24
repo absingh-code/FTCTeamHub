@@ -107,7 +107,7 @@ struct CompetitionTabView: View {
                 }
                 if let matches = detail.matches?.value {
                     let filtered = matches.filter { match in
-                        (!oursOnly || match.teamNumbers.contains(CompetitionWorkspace.teamNumber)) &&
+                        (!oursOnly || match.teamNumbers.contains(workspace.teamNumber)) &&
                         (!qualificationsOnly || match.isQualification) &&
                         (search.trimmed.isEmpty || match.label.localizedCaseInsensitiveContains(search.trimmed) ||
                          match.teamNumbers.contains { String($0).contains(search.trimmed) })

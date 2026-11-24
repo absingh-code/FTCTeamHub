@@ -36,20 +36,35 @@ enum DS {
         static let control: CGFloat = 12
         static let row: CGFloat = 18
     }
+
+    enum Control {
+        static let minimum: CGFloat = 44
+        static let teamMark: CGFloat = 48
+    }
 }
 
 struct TeamIdentity: View {
+    let name: String
+    let number: Int
+
     var body: some View {
         HStack(spacing: DS.Spacing.md) {
-            Image("TeamHubMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 52, height: 52)
-                .clipShape(.rect(cornerRadius: DS.Radius.control))
-                .accessibilityHidden(true)
+            Group {
+                if number == 36611 {
+                    Image("TeamHubMark").resizable().scaledToFit()
+                } else {
+                    Image(systemName: "person.3.fill")
+                        .font(.title3)
+                        .foregroundStyle(DS.Color.accent)
+                }
+            }
+            .frame(width: DS.Control.teamMark, height: DS.Control.teamMark)
+            .background(DS.Color.raised)
+            .clipShape(.rect(cornerRadius: DS.Radius.control))
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                Text("Wild Circuits").font(.headline)
-                Text("FTC #36611").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                Text(name).font(.headline)
+                Text("FTC #\(number)").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)

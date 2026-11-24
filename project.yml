@@ -23,12 +23,20 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ftcteamhub.app
         INFOPLIST_FILE: Resources/Info.plist
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "3"
         GENERATE_INFOPLIST_FILE: false
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
     scheme:
       testTargets: [FTCTeamHubTests, FTCTeamHubUITests]
   FTCTeamHubTests:
@@ -52,4 +60,7 @@ targets:
 packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
-    exactVersion: "8.0.0"
+    exactVersion: "9.0.0"
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    exactVersion: "12.6.0"

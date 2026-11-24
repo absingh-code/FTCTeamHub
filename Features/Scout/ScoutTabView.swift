@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ScoutTabView: View {
     @Environment(CompetitionWorkspace.self) private var workspace
     @Environment(AuthenticationViewModel.self) private var auth
+    @Environment(\.teamWorkspace) private var shared
     @Query(sort: \MatchObservation.updated, order: .reverse) private var reports: [MatchObservation]
     @Query(sort: \ScoutingRecord.timestamp, order: .reverse) private var legacy: [ScoutingRecord]
     @Query(sort: \PitObservation.created, order: .reverse) private var pitReports: [PitObservation]
@@ -115,7 +116,8 @@ struct ScoutTabView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                         ReportHeading(report: report)
-                        StatusLabel(title: report.submittedAt == nil ? "Draft" : "Saved on Device",
+                        StatusLabel(title: report.submittedAt == nil ? "Private Draft" :
+                                        shared?.reportDelivery(report.identity) ?? "Saved",
                                     icon: report.submittedAt == nil ? "pencil" : "checkmark.circle")
                     }
                     .padding(.vertical, DS.Spacing.xs)
@@ -135,7 +137,7 @@ struct ScoutTabView: View {
                     .navigationTitle("Legacy Report")
                 }
             }
-        } header: { Text("Reports on This Device") }
+        } header: { Text("Match Reports") }
     }
 
     private var pitList: some View {
@@ -196,17 +198,17 @@ struct ScoutTabView: View {
             }
             if let event = workspace.selected, let detail = workspace.detail {
                 let own = detail.matches?.value.filter {
-                    !$0.isPlayed && $0.teamNumbers.contains(CompetitionWorkspace.teamNumber)
+                    !$0.isPlayed && $0.teamNumbers.contains(workspace.teamNumber)
                 } ?? []
                 let open = own.filter { match in
-                    Set(match.teamNumbers.filter { $0 != CompetitionWorkspace.teamNumber })
+                    Set(match.teamNumbers.filter { $0 != workspace.teamNumber })
                         .subtracting(current.filter { $0.matchKey == match.key.id }.map(\.team)).count > 0
                 }
                 Section("Upcoming Coverage Gaps") {
                     if own.isEmpty {
-                        Text("No upcoming Wild Circuits matches are listed.").foregroundStyle(.secondary)
+                        Text("No upcoming matches for your team are listed.").foregroundStyle(.secondary)
                     } else if open.isEmpty {
-                        Text("All other robots in your upcoming matches are assigned on this device.").foregroundStyle(.secondary)
+                        Text("All other robots in your upcoming matches are assigned.").foregroundStyle(.secondary)
                     }
                     ForEach(open) { match in
                         NavigationLink {

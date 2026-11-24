@@ -3,6 +3,7 @@ import SwiftData
 
 struct IdeasListView: View {
     @Query(sort: \Idea.dateCreated, order: .reverse) private var ideas: [Idea]
+    @Environment(\.teamWorkspace) private var shared
     @State private var showingForm = false
 
     var body: some View {
@@ -18,7 +19,7 @@ struct IdeasListView: View {
                             .font(DS.Font.caption)
                             .foregroundStyle(DS.Color.labelSecondary)
                             .lineLimit(2)
-                        Text("\(idea.upvotes) votes")
+                        Text("\(idea.upvotes + (shared?.votes[idea.id.uuidString]?.count ?? 0)) votes")
                             .font(DS.Font.caption)
                             .foregroundStyle(DS.Color.labelTertiary)
                     }
@@ -53,7 +54,9 @@ struct IdeasListView: View {
 
 struct IdeaDetailView: View {
     @Bindable var idea: Idea
-    @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
+    @State private var voting = false
+    @State private var error: String?
 
     var body: some View {
         Form {
@@ -63,12 +66,24 @@ struct IdeaDetailView: View {
                 Text(idea.body)
                     .font(DS.Font.body)
             }
-            Section {
-                Button {
-                    idea.upvotes += 1
-                    try? context.save()
-                } label: {
-                    Label("Upvote (\(idea.upvotes))", systemImage: "arrow.up")
+            if let shared {
+                Section {
+                    let voters = shared.votes[idea.id.uuidString] ?? []
+                    let voted = voters.contains(shared.uid)
+                    Button {
+                        voting = true
+                        error = nil
+                        Task {
+                            defer { voting = false }
+                            do { try await shared.toggleVote(idea: idea.id) }
+                            catch { self.error = "Couldn’t update your vote. Try again." }
+                        }
+                    } label: {
+                        Label("\(voted ? "Remove Vote" : "Upvote") (\(idea.upvotes + voters.count))",
+                              systemImage: voted ? "arrow.up.circle.fill" : "arrow.up.circle")
+                    }
+                    .disabled(voting || !shared.online || !shared.team.canEdit)
+                    FormSaveError(message: error)
                 }
             }
         }
@@ -79,6 +94,7 @@ struct IdeaDetailView: View {
 
 struct IdeaFormView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var authVM
 
@@ -110,7 +126,7 @@ struct IdeaFormView: View {
                         )
                         context.insert(idea)
                         do {
-                            try context.save()
+                            try saveWorkspace(context, in: shared)
                             dismiss()
                         } catch {
                             context.rollback()

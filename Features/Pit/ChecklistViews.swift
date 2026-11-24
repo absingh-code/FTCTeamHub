@@ -6,6 +6,7 @@ struct ChecklistHub: View {
     var event: FTCEvent?
     @Environment(CompetitionWorkspace.self) private var workspace
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Query(sort: \ChecklistRun.started, order: .reverse) private var runs: [ChecklistRun]
     @Query private var custom: [ChecklistTemplate]
     @State private var openRun: ChecklistRun?
@@ -81,7 +82,7 @@ struct ChecklistHub: View {
         let run = ChecklistRun(template: template, eventID: eventID, match: match)
         context.insert(run)
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             error = nil
             openRun = run
         } catch {
@@ -94,6 +95,7 @@ struct ChecklistHub: View {
 private struct ChecklistRunView: View {
     let run: ChecklistRun
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var error: String?
 
@@ -146,7 +148,7 @@ private struct ChecklistRunView: View {
 
     private func save() {
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             error = nil
         } catch {
             context.rollback()
@@ -159,6 +161,7 @@ private struct ChecklistTemplateEditor: View {
     let template: ChecklistDefinition
     let saved: ChecklistTemplate?
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var items = ""
@@ -189,7 +192,7 @@ private struct ChecklistTemplateEditor: View {
                         row.title = title.trimmed
                         row.items = lines
                         do {
-                            try context.save()
+                            try saveWorkspace(context, in: shared)
                             dismiss()
                         } catch {
                             context.rollback()

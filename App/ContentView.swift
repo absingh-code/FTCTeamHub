@@ -12,46 +12,35 @@ struct ContentView: View {
                 .background(DS.Color.background)
         case .signedOut, .signingIn, .error:
             AuthenticationView()
+        case .membership:
+            MembershipView()
         case .signedIn(let user):
-            WorkspaceRoot(user: user, isDeviceWorkspace: auth.isDeviceWorkspace)
-                .id(user.id)
-        }
-    }
-}
-
-private struct WorkspaceRoot: View {
-    let user: AppUser
-    let isDeviceWorkspace: Bool
-    @State private var container: ModelContainer?
-    @State private var loadFailed = false
-    @State private var attempt = 0
-    @Environment(AuthenticationViewModel.self) private var auth
-
-    var body: some View {
-        Group {
-            if let container {
-                MainTabView()
-                    .modelContainer(container)
-            } else if loadFailed {
-                ContentUnavailableView {
-                    Label("Workspace unavailable", systemImage: "externaldrive.badge.exclamationmark")
-                } description: {
-                    Text("The app couldn’t open your workspace. Your original records are kept on this device.")
-                } actions: {
-                    Button("Try Again") { attempt += 1 }
-                        .buttonStyle(.borderedProminent)
-                    Button("Back to Sign In") { auth.signOut() }
+            if let team = auth.team, let workspace = auth.workspace {
+                if workspace.recordsReady {
+                    MainTabView(team: team, scope: user.id + ":" + team.id)
+                        .modelContainer(workspace.container)
+                        .environment(\.teamWorkspace, workspace)
+                        .id(user.id + ":" + team.id)
+                } else {
+                    VStack(spacing: DS.Spacing.lg) {
+                        if let error = workspace.syncError {
+                            DataNotice(title: "Workspace unavailable", detail: error,
+                                       icon: "arrow.trianglehead.clockwise", retry: workspace.reconnect)
+                        } else {
+                            ProgressView("Loading \(team.name)")
+                        }
+                        Button("Team Access", action: auth.switchTeam)
+                        Button("Sign Out", action: auth.signOut)
+                    }
+                    .padding()
                 }
             } else {
-                ProgressView("Opening workspace")
-            }
-        }
-        .task(id: attempt) {
-            loadFailed = false
-            do {
-                container = try WorkspaceStore.open(for: user.id, local: isDeviceWorkspace)
-            } catch {
-                loadFailed = true
+                #if DEBUG
+                if let team = auth.team {
+                    MainTabView(team: team, scope: "ui-testing")
+                        .modelContainer(PreviewSupport.container)
+                }
+                #endif
             }
         }
     }
@@ -59,8 +48,14 @@ private struct WorkspaceRoot: View {
 
 @MainActor
 struct MainTabView: View {
+    let team: TeamAccess
     @State private var selectedTab: Tab = .today
-    @State private var competition = CompetitionWorkspace()
+    @State private var competition: CompetitionWorkspace
+
+    init(team: TeamAccess, scope: String) {
+        self.team = team
+        _competition = State(initialValue: CompetitionWorkspace(teamNumber: team.number, scope: scope))
+    }
 
     enum Tab: Hashable {
         case today, competition, scout, work, pit
@@ -75,13 +70,13 @@ struct MainTabView: View {
                 .tabItem { Label("Compete", systemImage: "flag.checkered") }
                 .tag(Tab.competition)
             ScoutTabView()
-                .tabItem { Label("Scout", systemImage: "binoculars.fill") }
+                .tabItem { Label("Scout", systemImage: "binoculars") }
                 .tag(Tab.scout)
             WorkTabView()
                 .tabItem { Label("Work", systemImage: "checklist") }
                 .tag(Tab.work)
             PitTabView()
-                .tabItem { Label("Pit", systemImage: "wrench.and.screwdriver.fill") }
+                .tabItem { Label("Pit", systemImage: "wrench.and.screwdriver") }
                 .tag(Tab.pit)
         }
         .environment(competition)

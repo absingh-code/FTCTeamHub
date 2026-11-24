@@ -68,6 +68,7 @@ private struct EntryDetailView: View {
 
 private struct EntryEditorView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationViewModel.self) private var auth
     @State private var content = ""
@@ -129,7 +130,7 @@ private struct EntryEditorView: View {
         context.insert(NotebookEntry(authorID: user.id, authorName: user.name, content: content.trimmed,
                                      tags: [selected], hardwareConfigLinked: link.trimmed.isEmpty ? nil : link.trimmed))
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()

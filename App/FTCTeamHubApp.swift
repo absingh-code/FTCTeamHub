@@ -14,7 +14,7 @@ struct FTCTeamHubApp: App {
                 .environment(auth)
                 .preferredColorScheme(Appearance(rawValue: appearance)?.scheme)
                 .tint(DS.Color.accent)
-                .task { await auth.restore() }
+                .task { auth.restore() }
                 .onOpenURL { _ = GIDSignIn.sharedInstance.handle($0) }
         }
     }

@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function google() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+    function own(uid) { return google() && request.auth.uid == uid; }
+    function memberPath(team, uid) {
+      return /databases/$(database)/documents/workspaces/$(team)/members/$(uid);
+    }
+    function member(team) {
+      return google() && get(memberPath(team, request.auth.uid)).data.active == true;
+    }
+    function role(team) { return get(memberPath(team, request.auth.uid)).data.role; }
+    function writer(team) { return member(team) && role(team) in ['admin', 'mentor', 'member', 'scout']; }
+    function coordinator(team) { return member(team) && role(team) in ['admin', 'mentor']; }
+    function invitePath(team, email) {
+      return /databases/$(database)/documents/workspaces/$(team)/invites/$(email);
+    }
+    function indexPath(team, uid) {
+      return /databases/$(database)/documents/workspaceUsers/$(uid)/memberships/$(team);
+    }
+    function email() { return request.auth.token.email.lower(); }
+    function shortText(value, min, max) { return value is string && value.size() >= min && value.size() <= max; }
+    function invitationRole(value) { return value in ['member', 'scout', 'viewer']; }
+    function acceptsInvite(team, uid) {
+      let data = request.resource.data;
+      let invite = invitePath(team, email());
+      return data.keys().hasOnly(['name', 'role', 'active', 'joinedAt'])
+        && shortText(data.name, 1, 120)
+        && data.role == get(invite).data.role && invitationRole(data.role)
+        && get(invite).data.active == true
+        && getAfter(invite).data.active == false && getAfter(invite).data.acceptedBy == uid
+        && data.active == true && data.joinedAt == request.time
+        && getAfter(indexPath(team, uid)).data.joinedAt == request.time;
+    }
+    function message(data) {
+      return data.keys().hasOnly(['sender', 'text', 'createdAt', 'link'])
+        && data.sender == request.auth.uid && data.createdAt == request.time
+        && shortText(data.text, 1, 4000)
+        && (!('link' in data) || (shortText(data.link, 9, 500) && data.link.matches('https://[^ ]+')));
+    }
+    function uuid(value) { return value is string && value.matches('[A-F0-9-]{36}'); }
+    function recordKind(kind) {
+      return kind in ['task', 'note', 'idea', 'inventory', 'teamEvent', 'matchReport',
+                      'pitReport', 'scoutAssignment', 'issue', 'checklistTemplate', 'checklistRun', 'matchPlan'];
+    }
+    function attributed(kind) { return kind in ['note', 'idea', 'matchReport', 'pitReport', 'scoutAssignment']; }
+    function assigned(team, data) {
+      return !('assignedToID' in data) || (data.assignedToID is string
+        && (get(memberPath(team, data.assignedToID)).data.active == true
+          || (resource != null && resource.data.data.get('assignedToID', '') == data.assignedToID)));
+    }
+    function matchIdentity(data, key, author) {
+      return data.team is int && data.team > 0 && data.team <= 999999
+        && shortText(data.matchKey, 5, 120) && shortText(data.eventCode, 1, 64)
+        && shortText(data.matchLabel, 1, 120)
+        && data.author == author && data.identity == key
+        && key == data.matchKey + ':' + string(data.team) + ':' + author;
+    }
+    function count(data, key) {
+      return !(key in data) || (data[key] is int && data[key] >= 0 && data[key] <= 999);
+    }
+    function recordFields(team, kind, key, data, author) {
+      return (kind == 'task' && uuid(key) && data.id == key && shortText(data.title, 1, 300)
+          && data.status in ['todo', 'inProgress', 'blocked', 'done']
+          && data.priority in ['low', 'medium', 'high'] && assigned(team, data))
+        || (kind == 'note' && uuid(key) && data.id == key && data.authorID == author
+          && shortText(data.authorName, 1, 120) && shortText(data.content, 0, 20000))
+        || (kind == 'idea' && uuid(key) && data.id == key && data.authorID == author
+          && shortText(data.title, 1, 300) && shortText(data.body, 0, 20000) && data.upvotes == 0)
+        || (kind == 'inventory' && uuid(key) && data.id == key && shortText(data.name, 1, 300)
+          && data.quantity is int && data.quantity >= 0 && data.quantity <= 999999
+          && data.lowStockThreshold is int && data.lowStockThreshold >= 0 && data.lowStockThreshold <= 999999
+          && data.status in ['ok', 'low', 'maintenance'])
+        || (kind == 'teamEvent' && uuid(key) && data.id == key && shortText(data.name, 1, 300))
+        || (kind == 'matchReport' && matchIdentity(data, key, author)
+          && data.season is int && data.season >= 2019 && data.season <= 2100
+          && data.providerID is int && data.providerID >= 0
+          && data.matchKey == string(data.season) + ':' + data.eventCode + ':' + string(data.providerID)
+          && data.schemaVersion == (data.season == 2026 ? 1 : 0) && data.submittedAt is number
+          && count(data, 'autoHiveTips') && count(data, 'teleopHiveTips')
+          && count(data, 'gardenPieces') && count(data, 'flowerPlacements'))
+        || (kind == 'pitReport' && uuid(key) && data.id == key && data.author == author
+          && data.season is int && data.team is int && data.team > 0 && shortText(data.eventCode, 1, 64)
+          && shortText(data.drivetrain, 1, 4000) && shortText(data.autonomous, 1, 4000)
+          && shortText(data.reliability, 1, 4000))
+        || (kind == 'scoutAssignment' && matchIdentity(data, key, author))
+        || (kind == 'issue' && uuid(key) && data.id == key && shortText(data.title, 1, 300)
+          && data.status in ['Open', 'In Progress', 'Ready to Verify', 'Resolved']
+          && data.severity in ['Low', 'Normal', 'High', 'Critical']
+          && (data.status != 'Resolved' || shortText(data.resolution, 1, 10000)))
+        || (kind == 'checklistTemplate' && data.key == key && shortText(data.title, 1, 300)
+          && data.items is list && data.items.size() in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+        || (kind == 'checklistRun' && uuid(key) && data.id == key && data.completedIndices is list
+          && data.items is list && data.items.size() <= 20
+          && data.completedIndices.toSet().size() == data.completedIndices.size()
+          && data.completedIndices.size() <= data.items.size()
+          && (!('completed' in data) || (data.completedIndices.size() == data.items.size()
+            && (data.completedBy == request.auth.uid
+              || (resource != null && resource.data.data.get('completedBy', '') == data.completedBy
+                && resource.data.data.get('completed', 0) == data.completed)))))
+        || (kind == 'matchPlan' && data.matchKey == key && shortText(data.strategy, 0, 20000));
+    }
+    function record(team, id) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['kind', 'key', 'author', 'actor', 'revision', 'prior', 'deleted', 'data', 'updatedAt'])
+        && recordKind(data.kind)
+        && shortText(data.key, 1, 240) && id == data.kind + ':' + data.key
+        && data.actor == request.auth.uid && shortText(data.author, 1, 128)
+        && uuid(data.revision) && data.prior is string && data.deleted is bool && data.updatedAt == request.time
+        && data.data is map && data.data.size() <= 30
+        && (!attributed(data.kind) || data.author == request.auth.uid || coordinator(team))
+        && (data.kind != 'scoutAssignment' || data.deleted || get(memberPath(team, data.author)).data.active == true)
+        && recordFields(team, data.kind, data.key, data.data, data.author);
+    }
+    match /workspaceUsers/{uid}/memberships/{team} {
+      allow read: if own(uid);
+      allow create, update: if own(uid)
+        && request.resource.data.keys().hasOnly(['joinedAt']) && request.resource.data.joinedAt == request.time
+        && getAfter(memberPath(team, uid)).data.active == true
+        && getAfter(memberPath(team, uid)).data.joinedAt == request.time;
+    }
+    match /workspaces/{team} {
+      allow get: if member(team);
+      match /members/{uid} {
+        allow get: if own(uid) || member(team);
+        allow list: if member(team);
+        allow create: if own(uid) && acceptsInvite(team, uid);
+        allow update: if (own(uid) && resource.data.active == false && acceptsInvite(team, uid))
+          || (coordinator(team) && !own(uid) && invitationRole(resource.data.role)
+            && request.resource.data.active == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']));
+      }
+      match /invites/{address} {
+        allow get: if google() && (address == email() || coordinator(team));
+        allow create, update: if coordinator(team)
+          && request.resource.data.keys().hasOnly(['role', 'active', 'invitedBy', 'invitedAt'])
+          && request.resource.data.active == true && invitationRole(request.resource.data.role)
+          && request.resource.data.invitedBy == request.auth.uid && request.resource.data.invitedAt == request.time;
+        allow update: if google() && address == email()
+          && resource.data.active == true && request.resource.data.active == false
+          && request.resource.data.acceptedBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'acceptedBy'])
+          && getAfter(memberPath(team, request.auth.uid)).data.joinedAt == request.time;
+        allow delete: if coordinator(team);
+      }
+      match /messages/{id} {
+        allow read: if member(team);
+        allow create: if writer(team) && uuid(id) && message(request.resource.data);
+      }
+      match /announcements/{id} {
+        allow read: if member(team);
+        allow create: if coordinator(team) && uuid(id) && message(request.resource.data);
+      }
+      match /records/{id} {
+        allow read: if member(team);
+        allow create: if writer(team) && record(team, id)
+          && request.resource.data.prior == '' && request.resource.data.deleted == false;
+        allow update: if writer(team) && record(team, id)
+          && request.resource.data.prior == resource.data.revision
+          && request.resource.data.revision != resource.data.revision
+          && request.resource.data.kind == resource.data.kind
+          && (!attributed(resource.data.kind) || request.resource.data.author == resource.data.author);
+      }
+      match /votes/{id} {
+        allow read: if member(team);
+        allow create, update: if writer(team)
+          && request.resource.data.keys().hasOnly(['ideaID', 'uid', 'active', 'updatedAt'])
+          && uuid(request.resource.data.ideaID)
+          && id == request.resource.data.ideaID + ':' + request.auth.uid
+          && request.resource.data.uid == request.auth.uid && request.resource.data.active is bool
+          && request.resource.data.updatedAt == request.time
+          && get(/databases/$(database)/documents/workspaces/$(team)/records/$('idea:' + request.resource.data.ideaID)).data.deleted == false;
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@ struct TodayTabView: View {
 
     @Environment(CompetitionWorkspace.self) private var competition
     @Environment(AuthenticationViewModel.self) private var auth
+    @Environment(\.teamWorkspace) private var shared
     @Query private var inventory: [InventoryItem]
     @Query private var tasks: [TaskItem]
     @Query(sort: \TeamEventRecord.date) private var localEvents: [TeamEventRecord]
@@ -30,8 +31,12 @@ struct TodayTabView: View {
         NavigationStack {
             List {
                 Section {
-                    TeamIdentity()
-                        .padding(.vertical, DS.Spacing.sm)
+                    if let team = auth.team {
+                        NavigationLink { TeamTabView() } label: {
+                            TeamIdentity(name: team.name, number: team.number)
+                                .padding(.vertical, DS.Spacing.sm)
+                        }
+                    }
                     if let event = competition.selected, event.isCurrent || competition.upcomingMatch != nil {
                         competitionSummary(event)
                     } else {
@@ -49,6 +54,9 @@ struct TodayTabView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }
+                if let announcement = shared?.announcements.first {
+                    Section("Team Announcement") { AnnouncementRow(announcement: announcement) }
                 }
                 if !critical.isEmpty {
                     Section("Critical Robot Issues") {
@@ -118,7 +126,7 @@ struct TodayTabView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
-                        TeamTabView()
+                        AccountSettingsView()
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }

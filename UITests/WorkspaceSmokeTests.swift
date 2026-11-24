@@ -6,13 +6,22 @@ final class WorkspaceSmokeTests: XCTestCase {
     }
 
     @MainActor
-    func testDeviceWorkspaceAndSettings() {
+    func testWorkspaceAndSettings() {
         let app = launchWorkspace(appearance: "Light")
         capture("Today-light", from: app)
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["Local Contacts"].exists)
+        XCTAssertTrue(app.staticTexts["Appearance"].exists)
         capture("Settings-light", from: app)
+    }
+
+    @MainActor
+    func testLoginLayout() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-login", "-appearance", "Light"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Team Hub"].waitForExistence(timeout: 10))
+        capture("Sign-in-light", from: app)
     }
 
     @MainActor
@@ -74,12 +83,8 @@ final class WorkspaceSmokeTests: XCTestCase {
     @MainActor
     private func launchWorkspace(appearance: String) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-useDeviceWorkspace", "NO", "-appearance", appearance]
+        app.launchArguments = ["--ui-testing-workspace", "-appearance", appearance]
         app.launch()
-        let open = app.buttons["Use On This Device"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        capture("Sign-in-" + appearance.lowercased(), from: app)
-        open.tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
         return app
     }

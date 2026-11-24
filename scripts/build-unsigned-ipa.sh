@@ -7,6 +7,7 @@ archive="$release/FTCTeamHub.xcarchive"
 app="$archive/Products/Applications/FTCTeamHub.app"
 mkdir -p "$release"
 
+python3 scripts/configure-firebase.py
 xcodegen generate
 xcodebuild -version
 
@@ -33,3 +34,4 @@ ipa="$release/FTCTeamHub-$version-$build-unsigned.ipa"
 ditto -c -k --keepParent "$staging/Payload" "$ipa"
 unzip -t "$ipa"
 shasum -a 256 "$ipa" | tee "$release/sha256.txt"
+git rev-parse HEAD > "$release/commit.txt"

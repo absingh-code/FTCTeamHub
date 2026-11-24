@@ -179,7 +179,7 @@ struct CompareTeamsView: View {
                         }
                         .padding(.vertical, DS.Spacing.sm)
                     }
-                    Text("OPR is FTCScout’s estimate. Reports, stops and drivetrain come from observations on this device. A dash means unavailable.")
+                    Text("OPR is FTCScout’s estimate. Reports, stops and drivetrain come from team observations. A dash means unavailable.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }

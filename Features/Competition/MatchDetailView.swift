@@ -7,6 +7,7 @@ struct MatchDetailView: View {
     let directory: TeamDirectory
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(AuthenticationViewModel.self) private var auth
     @Query private var assignments: [ScoutAssignment]
     @Query private var observations: [MatchObservation]
@@ -49,7 +50,7 @@ struct MatchDetailView: View {
                                     Label(scoutLabel(entry.teamNumber), systemImage: "square.and.pencil")
                                 }
                                 .buttonStyle(.bordered)
-                                if let user = auth.currentUser, entry.teamNumber != CompetitionWorkspace.teamNumber {
+                                if let user = auth.currentUser, entry.teamNumber != auth.team?.number {
                                     let assigned = assignments.contains { $0.team == entry.teamNumber && $0.author == user.id }
                                     Button {
                                         toggleAssignment(team: entry.teamNumber, author: user.id)
@@ -74,7 +75,7 @@ struct MatchDetailView: View {
                 } header: {
                     Text("Scouting & Assignments")
                 } footer: {
-                    Text("Assignments are saved in this workspace on this device.")
+                    Text("Assignments are visible to the team after they sync.")
                 }
             }
             Section("Match Preparation") {
@@ -113,7 +114,7 @@ struct MatchDetailView: View {
             context.insert(ScoutAssignment(match: match, team: team, author: author))
         }
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             saveError = nil
         } catch {
             context.rollback()
@@ -128,6 +129,7 @@ private struct MatchPlanEditor: View {
     let directory: TeamDirectory
 
     @Environment(\.modelContext) private var context
+    @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
     @Query private var plans: [MatchPlan]
     @Query private var pits: [PitObservation]
@@ -162,7 +164,7 @@ private struct MatchPlanEditor: View {
                                 if !pit.reliability.trimmed.isEmpty { Text("Reliability · \(pit.reliability)") }
                                 if !pit.capabilities.trimmed.isEmpty { Text("Capabilities · \(pit.capabilities)") }
                             } else {
-                                Text("No pit observations saved on this device.")
+                                Text("No pit observations for this team yet.")
                             }
                         }
                         .font(.subheadline)
@@ -199,7 +201,7 @@ private struct MatchPlanEditor: View {
         plan.reminders = reminders.trimmed
         plan.updated = .now
         do {
-            try context.save()
+            try saveWorkspace(context, in: shared)
             dismiss()
         } catch {
             context.rollback()
