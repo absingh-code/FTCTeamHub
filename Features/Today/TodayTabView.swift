@@ -2,87 +2,196 @@ import SwiftUI
 import SwiftData
 
 struct TodayTabView: View {
-    @Query private var tasks: [TaskItem]
-    @Query private var events: [TeamEventRecord]
+    let openTab: (MainTabView.Tab) -> Void
+
+    @Environment(CompetitionWorkspace.self) private var competition
+    @Environment(AuthenticationViewModel.self) private var auth
+    @Environment(\.teamWorkspace) private var shared
     @Query private var inventory: [InventoryItem]
-    @Environment(AuthenticationViewModel.self) private var authVM
+    @Query private var tasks: [TaskItem]
+    @Query(sort: \TeamEventRecord.date) private var localEvents: [TeamEventRecord]
+    @Query(sort: \RobotIssue.updated, order: .reverse) private var issues: [RobotIssue]
+    @Query(sort: \ChecklistRun.started, order: .reverse) private var checks: [ChecklistRun]
+    @Query private var assignedScouting: [ScoutAssignment]
+    @Query private var observations: [MatchObservation]
+    @State private var addingIssue = false
+    @State private var addingTask = false
 
-    private var myOpenTasks: [TaskItem] {
-        guard let uid = authVM.currentUser?.id else { return [] }
-        return tasks
-            .filter { $0.assignedToID == uid && $0.status != "done" }
-            .sorted { ($0.deadline ?? .distantFuture) < ($1.deadline ?? .distantFuture) }
+    private var critical: [RobotIssue] {
+        issues.filter { $0.isOpen && $0.severity == IssueSeverity.critical.rawValue }
     }
 
-    private var lowStock: [InventoryItem] {
-        inventory.filter { $0.quantity <= $0.lowStockThreshold }
-    }
-
-    private var upcomingEvents: [TeamEventRecord] {
-        events
-            .filter { $0.date >= Calendar.current.startOfDay(for: .now) }
-            .sorted { $0.date < $1.date }
+    private var dueTasks: [TaskItem] {
+        tasks.filter {
+            $0.status != "done" && ($0.assignedToID == nil || $0.assignedToID == auth.currentUser?.id)
+        }.sorted { ($0.deadline ?? .distantFuture) < ($1.deadline ?? .distantFuture) }
     }
 
     var body: some View {
         NavigationStack {
             List {
-                if !myOpenTasks.isEmpty {
-                    Section("Assigned to you") {
-                        ForEach(myOpenTasks) { task in
-                            NavigationLink(value: task) {
-                                TaskRow(task: task)
-                            }
+                Section {
+                    if let team = auth.team {
+                        NavigationLink { TeamTabView() } label: {
+                            TeamIdentity(name: team.name, number: team.number)
+                                .padding(.vertical, DS.Spacing.sm)
+                        }
+                    }
+                    if let shared, !shared.online || !shared.pending.isEmpty {
+                        NavigationLink {
+                            SyncStatusView(workspace: shared)
+                        } label: {
+                            Label(shared.online ? "\(shared.pending.count) waiting to sync" : "Working offline",
+                                  systemImage: shared.online ? "arrow.trianglehead.clockwise" : "wifi.slash")
+                                .font(.subheadline)
                         }
                     }
                 }
-
-                if !upcomingEvents.isEmpty {
-                    Section("Upcoming") {
-                        ForEach(upcomingEvents.prefix(5)) { event in
+                Section("Competition") {
+                    if let event = competition.selected, event.isCurrent || competition.upcomingMatch != nil {
+                        competitionSummary(event)
+                    } else {
+                        Button {
+                            openTab(.competition)
+                        } label: {
                             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                                Text(event.name)
-                                    .font(DS.Font.body)
-                                    .foregroundStyle(DS.Color.labelPrimary)
-                                Text(event.date, style: .date)
-                                    .font(DS.Font.caption)
-                                    .foregroundStyle(DS.Color.labelSecondary)
+                                Label("Competition Schedule", systemImage: "calendar")
+                                    .font(.headline)
+                                Text(competition.selected?.name ?? "Choose an event to view matches and rankings.")
+                                    .font(.footnote).foregroundStyle(.secondary)
                             }
-                            .padding(.vertical, DS.Spacing.xs)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, DS.Spacing.sm)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if let announcement = shared?.announcements.first {
+                    Section("Team Announcement") { AnnouncementRow(announcement: announcement) }
+                }
+                if !critical.isEmpty {
+                    Section("Critical Robot Issues") {
+                        ForEach(critical.prefix(3)) { issue in
+                            NavigationLink {
+                                RobotIssueEditor(issue: issue)
+                            } label: {
+                                Label(issue.title, systemImage: "exclamationmark.octagon")
+                                    .symbolRenderingMode(.hierarchical)
+                            }
                         }
                     }
                 }
-
-                if !lowStock.isEmpty {
-                    Section("Inventory alerts") {
-                        ForEach(lowStock) { item in
-                            HStack {
-                                Text(item.name)
-                                    .font(DS.Font.body)
-                                Spacer()
-                                Text("\(item.quantity)")
-                                    .font(DS.Font.number)
-                                    .foregroundStyle(.orange)
+                Section("Due Tasks") {
+                    if dueTasks.isEmpty {
+                        Text("No open tasks assigned to you or left unassigned.").foregroundStyle(.secondary)
+                    }
+                    ForEach(dueTasks.prefix(4)) { task in
+                        NavigationLink {
+                            TaskEditor(task: task)
+                        } label: { TaskRow(task: task) }
+                    }
+                    Button("See Team Tasks", systemImage: "arrow.right") { openTab(.work) }
+                }
+                Section("Quick Actions") {
+                    if shared?.team.canEdit != false {
+                        Button("Scout a Match", systemImage: "binoculars") { openTab(.scout) }
+                        Button("Report a Robot Issue", systemImage: "wrench.and.screwdriver") { addingIssue = true }
+                        Button("Add a Task", systemImage: "plus") { addingTask = true }
+                    }
+                    NavigationLink {
+                        ChecklistHub(match: competition.upcomingMatch, event: competition.selected)
+                    } label: {
+                        Label("Run a Readiness Check", systemImage: "checklist")
+                    }
+                }
+                let upcoming = localEvents.filter { $0.date >= Calendar.current.startOfDay(for: .now) }
+                if !upcoming.isEmpty {
+                    Section("Team Events") {
+                        ForEach(upcoming.prefix(4)) { event in
+                            NavigationLink {
+                                List {
+                                    LabeledContent("Date", value: event.date.formatted(date: .abbreviated, time: .omitted))
+                                    if !event.location.trimmed.isEmpty { LabeledContent("Location", value: event.location) }
+                                    if !event.notes.trimmed.isEmpty { Text(event.notes) }
+                                    ForEach(event.readinessChecklist.indices, id: \.self) { Text(event.readinessChecklist[$0]) }
+                                }
+                                .navigationTitle(event.name)
+                            } label: {
+                                LabeledContent(event.name, value: event.date.formatted(date: .abbreviated, time: .omitted))
                             }
                         }
                     }
                 }
-
-                if myOpenTasks.isEmpty && upcomingEvents.isEmpty && lowStock.isEmpty {
-                    ContentUnavailableView(
-                        "Nothing scheduled",
-                        systemImage: "calendar",
-                        description: Text("Assigned tasks and events will appear here.")
-                    )
+                let low = inventory.filter { $0.quantity <= $0.lowStockThreshold }
+                if !low.isEmpty {
+                    Section("Inventory Alerts") {
+                        ForEach(low.prefix(4)) { item in
+                            NavigationLink {
+                                InventoryEditor(item: item)
+                            } label: {
+                                LabeledContent(item.name, value: "\(item.quantity) left")
+                            }
+                        }
+                    }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(DS.Color.background)
             .navigationTitle("Today")
-            .navigationDestination(for: TaskItem.self) { task in
-                TaskDetailView(task: task)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        AccountSettingsView()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
             }
+            .sheet(isPresented: $addingIssue) { RobotIssueFormSheet() }
+            .sheet(isPresented: $addingTask) { NavigationStack { TaskEditor() } }
+        }
+    }
+
+    @ViewBuilder
+    private func competitionSummary(_ event: FTCEvent) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text(event.isCurrent ? "AT COMPETITION" : "UP NEXT")
+                .font(.caption.weight(.semibold))
+                .tracking(1)
+                .foregroundStyle(DS.Color.accent)
+                .accessibilityHidden(true)
+            Text(event.name).font(DS.Font.title)
+            if let location = event.venueLabel {
+                Text(location).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, DS.Spacing.sm)
+
+        if let match = competition.upcomingMatch, let detail = competition.detail {
+            NavigationLink {
+                MatchDetailView(event: event, match: match, directory: detail.directory)
+            } label: {
+                MatchRow(match: match, zone: event.zone)
+            }
+            let latest = checks.first { $0.matchKey == match.key.id && $0.templateKey == "pre-match" }
+            NavigationLink {
+                ChecklistHub(match: match, event: event)
+            } label: {
+                LabeledContent("Pre-match checklist", value: latest?.completed != nil ? "Complete" : latest == nil ? "Not started" : "In progress")
+            }
+        }
+        let scouting = assignedScouting.filter { assignment in
+            assignment.eventCode == event.code && assignment.author == auth.currentUser?.id &&
+            !observations.contains { $0.identity == assignment.identity && $0.submittedAt != nil }
+        }
+        if !scouting.isEmpty {
+            Button {
+                openTab(.scout)
+            } label: {
+                LabeledContent("Scouting assignments", value: "\(scouting.count) open")
+            }
+        }
+        if competition.detail?.hasCachedData == true {
+            Label("Showing previously downloaded schedule", systemImage: "clock.arrow.circlepath")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 }
@@ -92,20 +201,20 @@ struct TaskRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            Text(task.title)
-                .font(DS.Font.body)
-                .foregroundStyle(DS.Color.labelPrimary)
-            HStack(spacing: DS.Spacing.sm) {
-                Text(task.priority.capitalized)
-                    .font(DS.Font.caption)
-                    .foregroundStyle(DS.Color.labelSecondary)
+            Text(task.title).font(.headline)
+            if !task.tags.isEmpty {
+                Text(task.tags.joined(separator: " · ")).font(.footnote).foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("\(task.priority.capitalized) priority")
                 if let deadline = task.deadline {
                     Text(deadline, style: .date)
-                        .font(DS.Font.caption)
-                        .foregroundStyle(DS.Color.labelTertiary)
                 }
             }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
         .padding(.vertical, DS.Spacing.xs)
+        .accessibilityElement(children: .combine)
     }
 }

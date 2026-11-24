@@ -1,0 +1,9 @@
+/build/
+/DerivedData/
+/FTCTeamHub.xcodeproj/
+**/xcuserdata/
+.DS_Store
+Resources/GoogleService-Info.plist
+/firebase/node_modules/
+/*-debug.log
+/.firebase/

@@ -1,0 +1,119 @@
+import XCTest
+
+final class WorkspaceSmokeTests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testWorkspaceAndSettings() {
+        let app = launchWorkspace(appearance: "Light")
+        capture("Today-light", from: app)
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Appearance"].exists)
+        capture("Settings-light", from: app)
+        app.tabBars.buttons["Work"].tap()
+        XCTAssertTrue(app.staticTexts["Pack the spare controller"].waitForExistence(timeout: 10))
+        capture("Tasks-light", from: app)
+    }
+
+    @MainActor
+    func testLoginLayout() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-login", "-appearance", "Light"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Team Hub"].waitForExistence(timeout: 10))
+        capture("Sign-in-light", from: app)
+    }
+
+    @MainActor
+    func testCompetitionAndConversationLayouts() {
+        let layouts = [
+            ("chat", "Team Chat", "Dark"),
+            ("profile", "Team 36611", "Light"),
+            ("scouting", "Match Draft", "Light")
+        ]
+        for (screen, title, appearance) in layouts {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing-workspace", "--screen=" + screen, "-appearance", appearance]
+            app.launch()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15))
+            capture(screen + "-" + appearance.lowercased(), from: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testReportAndResolveRobotIssue() {
+        let app = launchWorkspace(appearance: "Dark")
+        app.buttons["Report a Robot Issue"].tap()
+        XCTAssertTrue(app.navigationBars["New Robot Issue"].waitForExistence(timeout: 8))
+        let title = "Check connector " + String(UUID().uuidString.prefix(4))
+        let titleField = app.textFields["Title"]
+        XCTAssertTrue(titleField.exists)
+        titleField.tap()
+        titleField.typeText(title)
+        app.navigationBars.buttons["Save"].tap()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 8))
+
+        app.tabBars.buttons["Pit"].tap()
+        app.staticTexts["Robot Issues"].tap()
+        let saved = app.staticTexts[title]
+        XCTAssertTrue(saved.waitForExistence(timeout: 8))
+        saved.tap()
+        XCTAssertTrue(app.navigationBars["Robot Issue"].waitForExistence(timeout: 8))
+        capture("Robot-issue-dark", from: app)
+
+        let picker = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Status")).firstMatch
+        XCTAssertTrue(picker.exists)
+        picker.tap()
+        app.buttons["Resolved"].tap()
+        let note = app.textFields["What fixed it?"].exists ? app.textFields["What fixed it?"] : app.textViews["What fixed it?"]
+        note.tap()
+        note.typeText("Reseated the connector.")
+        app.navigationBars.buttons["Save"].tap()
+        XCTAssertTrue(app.navigationBars["Robot Issues"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts[title].exists)
+    }
+
+    @MainActor
+    func testCompleteReadinessRun() {
+        let app = launchWorkspace(appearance: "Dark")
+        app.tabBars.buttons["Pit"].tap()
+        app.staticTexts["Readiness Checklists"].tap()
+        XCTAssertTrue(app.navigationBars["Readiness"].waitForExistence(timeout: 8))
+        app.buttons["Pre-match"].tap()
+
+        let items = ["Secure a charged battery", "Check connectors and fasteners", "Confirm starting configuration",
+                     "Select the planned autonomous routine", "Verify controllers and Driver Station"]
+        for item in items {
+            let button = app.buttons[item]
+            XCTAssertTrue(button.waitForExistence(timeout: 8))
+            if button.value as? String != "Checked" { button.tap() }
+        }
+        let complete = app.buttons["Complete Run"]
+        if !complete.isHittable { app.swipeUp() }
+        XCTAssertTrue(complete.isEnabled)
+        complete.tap()
+        XCTAssertTrue(app.staticTexts["Completed by"].waitForExistence(timeout: 8))
+        capture("Readiness-dark", from: app)
+    }
+
+    @MainActor
+    private func launchWorkspace(appearance: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-workspace", "-appearance", appearance]
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+        return app
+    }
+
+    @MainActor
+    private func capture(_ name: String, from app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

@@ -1,57 +1,86 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
-    @Environment(AuthenticationViewModel.self) private var authVM
+    @Environment(AuthenticationViewModel.self) private var auth
 
     var body: some View {
-        Group {
-            switch authVM.authState {
-            case .checking:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DS.Color.background)
-            case .signedOut, .error:
-                AuthenticationView()
-            case .signingIn:
-                ProgressView("Signing in…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DS.Color.background)
-            case .signedIn:
-                MainTabView()
+        switch auth.authState {
+        case .checking:
+            ProgressView("Restoring session")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(DS.Color.background)
+        case .signedOut, .signingIn, .error:
+            AuthenticationView()
+        case .membership:
+            MembershipView()
+        case .signedIn(let user):
+            if let team = auth.team, let workspace = auth.workspace {
+                if workspace.recordsReady {
+                    MainTabView(team: team, scope: user.id + ":" + team.id)
+                        .modelContainer(workspace.container)
+                        .environment(\.teamWorkspace, workspace)
+                        .id(user.id + ":" + team.id)
+                } else {
+                    VStack(spacing: DS.Spacing.lg) {
+                        if let error = workspace.syncError {
+                            DataNotice(title: "Workspace unavailable", detail: error,
+                                       icon: "arrow.trianglehead.clockwise", retry: workspace.reconnect)
+                        } else {
+                            ProgressView("Loading \(team.name)")
+                        }
+                        Button("Team Access", action: auth.switchTeam)
+                        Button("Sign Out", action: auth.signOut)
+                    }
+                    .padding()
+                }
+            } else {
+                #if DEBUG
+                if let team = auth.team {
+                    PreviewWorkspace(team: team)
+                        .modelContainer(PreviewSupport.fixtureContainer)
+                }
+                #endif
             }
         }
     }
 }
 
+@MainActor
 struct MainTabView: View {
+    let team: TeamAccess
     @State private var selectedTab: Tab = .today
+    @State private var competition: CompetitionWorkspace
+
+    init(team: TeamAccess, scope: String) {
+        self.team = team
+        _competition = State(initialValue: CompetitionWorkspace(teamNumber: team.number, scope: scope))
+    }
 
     enum Tab: Hashable {
-        case today, work, pit, scout, team
+        case today, competition, scout, work, pit
     }
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            TodayTabView()
-                .tabItem { Label("Today", systemImage: "sun.max") }
+            TodayTabView(openTab: { selectedTab = $0 })
+                .tabItem { Label("Today", systemImage: "house") }
                 .tag(Tab.today)
-
+            CompetitionTabView()
+                .tabItem { Label("Compete", systemImage: "flag.checkered") }
+                .tag(Tab.competition)
+            ScoutTabView()
+                .tabItem { Label("Scout", systemImage: "binoculars") }
+                .tag(Tab.scout)
             WorkTabView()
                 .tabItem { Label("Work", systemImage: "checklist") }
                 .tag(Tab.work)
-
             PitTabView()
                 .tabItem { Label("Pit", systemImage: "wrench.and.screwdriver") }
                 .tag(Tab.pit)
-
-            ScoutTabView()
-                .tabItem { Label("Scout", systemImage: "chart.bar") }
-                .tag(Tab.scout)
-
-            TeamTabView()
-                .tabItem { Label("Team", systemImage: "person.2") }
-                .tag(Tab.team)
         }
-        .tint(DS.Color.accent)
+        .environment(competition)
+        .task(id: competition.season) { await competition.loadEvents() }
+        .task(id: competition.selected?.id) { await competition.loadSelected() }
     }
 }
