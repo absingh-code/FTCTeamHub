@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TeamTabView: View {
     @Environment(AuthenticationViewModel.self) private var auth
@@ -178,6 +179,9 @@ struct AccountSettingsView: View {
     @Environment(AuthenticationViewModel.self) private var auth
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @State private var signOut = false
+    @State private var archive: LegacyArchive?
+    @State private var exporting = false
+    @State private var archiveStatus: String?
 
     var body: some View {
         Form {
@@ -197,11 +201,30 @@ struct AccountSettingsView: View {
                 LabeledContent("Version", value: "\(version) (\(build))")
                 Link("Report an App Issue", destination: URL(string: "https://github.com/absingh-code/FTCTeamHub/issues")!)
             }
+            if let googleID = auth.previousGoogleID {
+                Section("Legacy records") {
+                    Button("Export Previous Workspace", systemImage: "square.and.arrow.up") {
+                        do {
+                            archive = try LegacyArchive.export(googleID: googleID)
+                            exporting = archive != nil
+                            archiveStatus = archive == nil ? "No previous workspace belongs to this Google account on this device." : nil
+                        } catch {
+                            archiveStatus = "Couldn’t open the previous workspace. Its records are still on this device."
+                        }
+                    }
+                    if let archiveStatus { Text(archiveStatus).font(.footnote).foregroundStyle(.secondary) }
+                }
+            }
             Section { Button("Sign Out", role: .destructive) { signOut = true } }
             FormSaveError(message: auth.membershipError)
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .fileExporter(isPresented: $exporting, document: archive, contentType: .json,
+                      defaultFilename: "Team-Hub-legacy-records") { result in
+            if case .failure = result { archiveStatus = "Couldn’t export the previous workspace." }
+            archive = nil
+        }
         .confirmationDialog("Sign out?", isPresented: $signOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive, action: auth.signOut)
             Button("Cancel", role: .cancel) {}

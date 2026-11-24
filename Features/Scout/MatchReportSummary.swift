@@ -6,8 +6,8 @@ struct ReportHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            Text("#\(report.team) · \(report.matchLabel)").font(.headline)
-            Text("\(report.eventCode) · \(report.season)–\(report.season + 1)")
+            Text("#\(String(report.team)) · \(report.matchLabel)").font(.headline)
+            Text("\(report.eventCode) · \(String(report.season))–\(String(report.season + 1))")
                 .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)

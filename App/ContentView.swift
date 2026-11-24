@@ -37,8 +37,8 @@ struct ContentView: View {
             } else {
                 #if DEBUG
                 if let team = auth.team {
-                    MainTabView(team: team, scope: "ui-testing")
-                        .modelContainer(PreviewSupport.container)
+                    PreviewWorkspace(team: team)
+                        .modelContainer(PreviewSupport.fixtureContainer)
                 }
                 #endif
             }

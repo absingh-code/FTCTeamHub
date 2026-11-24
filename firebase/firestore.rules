@@ -65,37 +65,37 @@ service cloud.firestore {
       return !(key in data) || (data[key] is int && data[key] >= 0 && data[key] <= 999);
     }
     function recordFields(team, kind, key, data, author) {
-      return (kind == 'task' && uuid(key) && data.id == key && shortText(data.title, 1, 300)
+      return kind == 'task' ? (uuid(key) && data.id == key && shortText(data.title, 1, 300)
           && data.status in ['todo', 'inProgress', 'blocked', 'done']
           && data.priority in ['low', 'medium', 'high'] && assigned(team, data))
-        || (kind == 'note' && uuid(key) && data.id == key && data.authorID == author
+        : kind == 'note' ? (uuid(key) && data.id == key && data.authorID == author
           && shortText(data.authorName, 1, 120) && shortText(data.content, 0, 20000))
-        || (kind == 'idea' && uuid(key) && data.id == key && data.authorID == author
+        : kind == 'idea' ? (uuid(key) && data.id == key && data.authorID == author
           && shortText(data.title, 1, 300) && shortText(data.body, 0, 20000) && data.upvotes == 0)
-        || (kind == 'inventory' && uuid(key) && data.id == key && shortText(data.name, 1, 300)
+        : kind == 'inventory' ? (uuid(key) && data.id == key && shortText(data.name, 1, 300)
           && data.quantity is int && data.quantity >= 0 && data.quantity <= 999999
           && data.lowStockThreshold is int && data.lowStockThreshold >= 0 && data.lowStockThreshold <= 999999
           && data.status in ['ok', 'low', 'maintenance'])
-        || (kind == 'teamEvent' && uuid(key) && data.id == key && shortText(data.name, 1, 300))
-        || (kind == 'matchReport' && matchIdentity(data, key, author)
+        : kind == 'teamEvent' ? (uuid(key) && data.id == key && shortText(data.name, 1, 300))
+        : kind == 'matchReport' ? (matchIdentity(data, key, author)
           && data.season is int && data.season >= 2019 && data.season <= 2100
           && data.providerID is int && data.providerID >= 0
           && data.matchKey == string(data.season) + ':' + data.eventCode + ':' + string(data.providerID)
           && data.schemaVersion == (data.season == 2026 ? 1 : 0) && data.submittedAt is number
           && count(data, 'autoHiveTips') && count(data, 'teleopHiveTips')
           && count(data, 'gardenPieces') && count(data, 'flowerPlacements'))
-        || (kind == 'pitReport' && uuid(key) && data.id == key && data.author == author
+        : kind == 'pitReport' ? (uuid(key) && data.id == key && data.author == author
           && data.season is int && data.team is int && data.team > 0 && shortText(data.eventCode, 1, 64)
           && shortText(data.drivetrain, 1, 4000) && shortText(data.autonomous, 1, 4000)
           && shortText(data.reliability, 1, 4000))
-        || (kind == 'scoutAssignment' && matchIdentity(data, key, author))
-        || (kind == 'issue' && uuid(key) && data.id == key && shortText(data.title, 1, 300)
+        : kind == 'scoutAssignment' ? (matchIdentity(data, key, author))
+        : kind == 'issue' ? (uuid(key) && data.id == key && shortText(data.title, 1, 300)
           && data.status in ['Open', 'In Progress', 'Ready to Verify', 'Resolved']
           && data.severity in ['Low', 'Normal', 'High', 'Critical']
           && (data.status != 'Resolved' || shortText(data.resolution, 1, 10000)))
-        || (kind == 'checklistTemplate' && data.key == key && shortText(data.title, 1, 300)
+        : kind == 'checklistTemplate' ? (data.key == key && shortText(data.title, 1, 300)
           && data.items is list && data.items.size() in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
-        || (kind == 'checklistRun' && uuid(key) && data.id == key && data.completedIndices is list
+        : kind == 'checklistRun' ? (uuid(key) && data.id == key && data.completedIndices is list
           && data.items is list && data.items.size() <= 20
           && data.completedIndices.toSet().size() == data.completedIndices.size()
           && data.completedIndices.size() <= data.items.size()
@@ -103,7 +103,8 @@ service cloud.firestore {
             && (data.completedBy == request.auth.uid
               || (resource != null && resource.data.data.get('completedBy', '') == data.completedBy
                 && resource.data.data.get('completed', 0) == data.completed)))))
-        || (kind == 'matchPlan' && data.matchKey == key && shortText(data.strategy, 0, 20000));
+        : kind == 'matchPlan' ? (data.matchKey == key && shortText(data.strategy, 0, 20000))
+        : false;
     }
     function record(team, id) {
       let data = request.resource.data;

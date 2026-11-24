@@ -35,7 +35,7 @@ final class AuthenticationViewModel {
     private(set) var membershipError: String?
     private(set) var checkingMembership = false
     private(set) var isGoogleConfigured = false
-    var isDeviceWorkspace: Bool { workspace == nil }
+    private(set) var previousGoogleID: String?
     var isSigningIn: Bool { if case .signingIn = authState { true } else { false } }
 
     private var backend: Firestore?
@@ -234,6 +234,7 @@ final class AuthenticationViewModel {
         }
         currentUser = AppUser(id: account.uid, name: String((account.displayName ?? "Team member").prefix(120)),
                               email: email.lowercased(), role: "", profileImageURL: account.photoURL?.absoluteString)
+        previousGoogleID = account.providerData.first { $0.providerID == "google.com" }?.uid
         authState = .membership
         await refreshMemberships()
     }
@@ -257,6 +258,7 @@ final class AuthenticationViewModel {
         closeWorkspace()
         generation = UUID()
         currentUser = nil
+        previousGoogleID = nil
         teams = []
         membershipError = nil
         checkingMembership = false

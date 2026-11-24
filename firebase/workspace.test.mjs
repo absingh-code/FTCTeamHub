@@ -192,3 +192,26 @@ test('scouting keys, votes and revocation remain enforced', async () => {
   await assertFails(getDocs(collection(scout, 'workspaces', team, 'records')));
   await assertFails(setDoc(doc(scout, messagePath(id())), { text: 'Revoked', sender: 'scout', createdAt: serverTimestamp() }));
 });
+
+test('inventory changes require an atomic, attributed quantity history', async () => {
+  const key = id();
+  const ref = doc(leader, 'workspaces', team, 'records', 'inventory:' + key);
+  const fields = { id: key, name: 'M3 locknuts', status: 'ok', quantity: 12, lowStockThreshold: 4 };
+  const first = record({ kind: 'inventory', key, actor: 'mentor', fields });
+  await assertFails(setDoc(ref, first));
+  async function applyStockChange(value, before, after) {
+    const batch = writeBatch(leader);
+    batch.set(ref, value);
+    batch.set(doc(ref, 'stockChanges', value.revision),
+      { actor: 'mentor', before, after, createdAt: serverTimestamp() });
+    await batch.commit();
+  }
+  await applyStockChange(first, 0, 12);
+  const second = record({ kind: 'inventory', key, actor: 'mentor', prior: first.revision, fields: { ...fields, quantity: 8 } });
+  await assertFails(applyStockChange(second, 0, 8));
+  await applyStockChange(second, 12, 8);
+  const history = await getDocs(collection(ref, 'stockChanges'));
+  assert.equal(history.size, 2);
+  assert.equal((await getDoc(doc(leader, ref.path + '/stockChanges/' + second.revision))).data().before, 12);
+  await assertFails(getDocs(collection(outsider, ref.path, 'stockChanges')));
+});

@@ -7,6 +7,7 @@ struct TeamProfileView: View {
     let directory: TeamDirectory
     let stats: FTCParticipation.Stats?
     let matches: [FTCMatch]
+    private let useLiveProvider: Bool
 
     @State private var team: ScoutFeed<FTCTeam>?
     @State private var appearances: ScoutFeed<[FTCParticipation]>?
@@ -16,12 +17,14 @@ struct TeamProfileView: View {
     @Query private var observations: [MatchObservation]
     @Query private var pits: [PitObservation]
 
-    init(number: Int, event: FTCEvent, directory: TeamDirectory, stats: FTCParticipation.Stats?, matches: [FTCMatch]) {
+    init(number: Int, event: FTCEvent, directory: TeamDirectory, stats: FTCParticipation.Stats?, matches: [FTCMatch],
+         useLiveProvider: Bool = true) {
         self.number = number
         self.event = event
         self.directory = directory
         self.stats = stats
         self.matches = matches
+        self.useLiveProvider = useLiveProvider
         let season = event.season
         let code = event.code
         _observations = Query(filter: #Predicate { $0.team == number && $0.season == season && $0.eventCode == code },
@@ -34,7 +37,7 @@ struct TeamProfileView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                    Text("#\(number)").font(.subheadline.monospacedDigit()).foregroundStyle(DS.Color.accent)
+                    Text("#\(String(number))").font(.subheadline.monospacedDigit()).foregroundStyle(DS.Color.accent)
                     Text(team?.value.name ?? directory.names[number] ?? "Team \(number)").font(DS.Font.display)
                     if let location = team?.value.location, !location.isEmpty {
                         Label(location, systemImage: "mappin")
@@ -72,7 +75,7 @@ struct TeamProfileView: View {
                     } label: { MatchRow(match: match, zone: event.zone) }
                 }
             }
-            Section("Event Participation · \(event.season)") {
+            Section("Event Participation · \(String(event.season))") {
                 if let historyError {
                     DataNotice(title: "Season history unavailable", detail: historyError, icon: "calendar.badge.exclamationmark")
                 }
@@ -109,7 +112,7 @@ struct TeamProfileView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Team \(number)")
+        .navigationTitle("Team \(String(number))")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
@@ -120,7 +123,7 @@ struct TeamProfileView: View {
     }
 
     private func load() async {
-        guard !loading else { return }
+        guard useLiveProvider, !loading else { return }
         loading = true
         defer { loading = false }
         let api = FTCScoutAPIClient.shared
@@ -166,7 +169,7 @@ struct CompareTeamsView: View {
                             GridRow {
                                 Text("Metric").font(.headline)
                                 ForEach(selected.sorted(), id: \.self) { number in
-                                    Text("#\(number)").font(.headline.monospacedDigit()).frame(minWidth: 78, alignment: .leading)
+                                    Text("#\(String(number))").font(.headline.monospacedDigit()).frame(minWidth: 78, alignment: .leading)
                                 }
                             }
                             compareRow("Rank") { standings[$0]?.standingRank.map { String($0) } ?? "—" }

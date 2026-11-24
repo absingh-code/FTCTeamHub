@@ -23,7 +23,7 @@ struct CompetitionTabView: View {
                     }
                     Picker("Season", selection: $workspace.season) {
                         ForEach(CompetitionWorkspace.seasons, id: \.self) { year in
-                            Text(year == 2026 ? "2026–27 · BIOBUZZ" : "\(year)–\(year + 1)").tag(year)
+                            Text(year == 2026 ? "2026–27 · BIOBUZZ" : "\(String(year))–\(String(year + 1))").tag(year)
                         }
                     }
                     if let events = workspace.events?.value, !events.isEmpty {

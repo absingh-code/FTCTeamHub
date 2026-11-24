@@ -27,9 +27,21 @@ struct FTCEvent: Codable, Hashable, Identifiable, Sendable {
     var firstDay: String? { start.map { String($0.prefix(10)) } }
     var lastDay: String? { end.map { String($0.prefix(10)) } }
     var dateLabel: String? {
-        guard let firstDay else { return nil }
-        guard let lastDay, lastDay != firstDay else { return firstDay }
-        return "\(firstDay) to \(lastDay)"
+        guard let firstDay, let first = displayDate(firstDay) else { return nil }
+        guard let lastDay, lastDay != firstDay, let last = displayDate(lastDay) else { return first }
+        return "\(first) – \(last)"
+    }
+
+    private func displayDate(_ date: String) -> String? {
+        let parser = DateFormatter()
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = zone
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let value = parser.date(from: date) else { return nil }
+        var style = Date.FormatStyle().month(.abbreviated).day()
+        style.timeZone = zone
+        return value.formatted(style)
     }
 
     var isCurrent: Bool {

@@ -25,7 +25,7 @@ struct EventParticipationView: View {
                         LabeledContent("Estimated NP OPR", value: TeamProfileView.format(stats.opr?.totalPointsNp))
                     }
                 }
-                Section("Matches for #\(participation.teamNumber)") {
+                Section("Matches for #\(String(participation.teamNumber))") {
                     let teamMatches = matches?.value.filter { $0.teamNumbers.contains(participation.teamNumber) }
                     if let teamMatches, teamMatches.isEmpty {
                         Text("No matches available for this team.").foregroundStyle(.secondary)

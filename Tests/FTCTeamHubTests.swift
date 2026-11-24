@@ -139,6 +139,41 @@ final class FTCTeamHubTests: XCTestCase {
         XCTAssertEqual(CSVExporter.escape(" =1+1"), "\"' =1+1\"")
     }
 
+    @MainActor
+    func testSharedTaskProjectionPreservesStableIdentifierAndAssignments() throws {
+        let schema = WorkspaceStore.current
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let task = TaskItem(title: "Check the drivetrain", assignedToID: "scout-a", priority: "high",
+                            deadline: Date(timeIntervalSinceReferenceDate: 500), tags: ["Electrical"])
+        let first = try XCTUnwrap(SharedRecord.capture(task))
+        try first.apply(in: container.mainContext, deleted: false)
+        try container.mainContext.save()
+        task.status = "done"
+        let second = try XCTUnwrap(SharedRecord.capture(task))
+        XCTAssertEqual(first.id, second.id)
+        try second.apply(in: container.mainContext, deleted: false)
+        try container.mainContext.save()
+        let rows = try container.mainContext.fetch(FetchDescriptor<TaskItem>())
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.assignedToID, "scout-a")
+        XCTAssertEqual(rows.first?.status, "done")
+        XCTAssertEqual(rows.first?.deadline, task.deadline)
+        try second.apply(in: container.mainContext, deleted: true)
+        try container.mainContext.save()
+        XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<TaskItem>()).isEmpty)
+    }
+
+    func testEventDateDoesNotDisplayProviderISOValue() {
+        let event = FTCEvent(season: 2026, code: "USNJSOM3", name: "League Meet",
+                             start: "2026-11-15", end: "2026-11-16", timezone: "America/New_York",
+                             location: nil, modifiedRules: nil)
+        XCTAssertNotNil(event.dateLabel)
+        XCTAssertFalse(event.dateLabel?.contains("2026-11-15") ?? true)
+        XCTAssertEqual(event.id, "2026:USNJSOM3")
+        XCTAssertEqual(TeamDirectory().label(36611), "#36611")
+    }
+
     private func decodeMatch(_ json: String) throws -> FTCMatch {
         try JSONDecoder().decode(FTCMatch.self, from: Data(json.utf8))
     }

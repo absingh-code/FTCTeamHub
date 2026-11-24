@@ -61,6 +61,28 @@ enum WorkspaceStore {
         return folder
     }
 
+    static func openOwnedArchive(googleID: String) throws -> ModelContainer? {
+        let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                  appropriateFor: nil, create: false)
+        let digest = SHA256.hash(data: Data(googleID.utf8)).map { String(format: "%02x", $0) }.joined()
+        let accountStore = support.appendingPathComponent("Workspaces", isDirectory: true)
+            .appendingPathComponent(digest + ".store")
+        if FileManager.default.fileExists(atPath: accountStore.path) {
+            let config = ModelConfiguration(schema: current, url: accountStore, allowsSave: false, cloudKitDatabase: .none)
+            return try ModelContainer(for: current, configurations: [config])
+        }
+
+        let original = ModelConfiguration(schema: legacy, allowsSave: false, cloudKitDatabase: .none)
+        guard FileManager.default.fileExists(atPath: original.url.path) else { return nil }
+        let owner = UserDefaults.standard.string(forKey: "legacyWorkspaceOwner")
+        if owner == googleID {
+            let config = ModelConfiguration(schema: current, url: original.url, allowsSave: false, cloudKitDatabase: .none)
+            return try ModelContainer(for: current, configurations: [config])
+        }
+        guard owner == nil, try legacyBelongs(to: googleID, configuration: original) else { return nil }
+        return try ModelContainer(for: legacy, configurations: [original])
+    }
+
     static func legacyBelongs(to userID: String, configuration: ModelConfiguration) throws -> Bool {
         let original = try ModelContainer(for: legacy, configurations: [configuration])
         let db = original.mainContext

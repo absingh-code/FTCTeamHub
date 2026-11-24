@@ -80,7 +80,6 @@ struct RobotIssueEditor: View {
     @Environment(\.modelContext) private var context
     @Environment(\.teamWorkspace) private var shared
     @Environment(\.dismiss) private var dismiss
-    @Environment(AuthenticationViewModel.self) private var auth
     @State private var title = ""
     @State private var detail = ""
     @State private var subsystem = RobotSubsystem.drivetrain

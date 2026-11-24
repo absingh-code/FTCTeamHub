@@ -64,7 +64,7 @@ struct TeamIdentity: View {
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text(name).font(.headline)
-                Text("FTC #\(number)").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                Text("FTC #\(String(number))").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)

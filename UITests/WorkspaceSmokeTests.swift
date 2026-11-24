@@ -13,6 +13,9 @@ final class WorkspaceSmokeTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Appearance"].exists)
         capture("Settings-light", from: app)
+        app.tabBars.buttons["Work"].tap()
+        XCTAssertTrue(app.staticTexts["Pack the spare controller"].waitForExistence(timeout: 10))
+        capture("Tasks-light", from: app)
     }
 
     @MainActor
@@ -22,6 +25,23 @@ final class WorkspaceSmokeTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Team Hub"].waitForExistence(timeout: 10))
         capture("Sign-in-light", from: app)
+    }
+
+    @MainActor
+    func testCompetitionAndConversationLayouts() {
+        let layouts = [
+            ("chat", "Team Chat", "Dark"),
+            ("profile", "Team 36611", "Light"),
+            ("scouting", "Match Draft", "Light")
+        ]
+        for (screen, title, appearance) in layouts {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing-workspace", "--screen=" + screen, "-appearance", appearance]
+            app.launch()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15))
+            capture(screen + "-" + appearance.lowercased(), from: app)
+            app.terminate()
+        }
     }
 
     @MainActor

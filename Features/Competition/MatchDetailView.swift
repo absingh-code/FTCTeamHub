@@ -46,36 +46,7 @@ struct MatchDetailView: View {
                 Section {
                     ForEach(match.competitors.filter { $0.alliance.lowercased() != "solo" && $0.teamNumber > 0 },
                             id: \.teamNumber) { entry in
-                        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                            NavigationLink {
-                                let detail = competition.detail
-                                TeamProfileView(number: entry.teamNumber, event: event, directory: directory,
-                                    stats: competition.selected?.id == event.id
-                                        ? detail?.standings?.value.first { $0.teamNumber == entry.teamNumber }?.stats : nil,
-                                    matches: competition.selected?.id == event.id ? detail?.matches?.value ?? [match] : [match])
-                            } label: {
-                                Text(directory.label(entry.teamNumber)).font(.headline)
-                            }
-                            Text(entry.alliance.capitalized + (entry.noShow == true ? " · No show" : "") +
-                                 (entry.dq == true ? " · Disqualified" : "") +
-                                 (entry.surrogate == true ? " · Surrogate" : ""))
-                                .font(.footnote).foregroundStyle(.secondary)
-                            ViewThatFits(in: .horizontal) {
-                                HStack { scoutingActions(entry.teamNumber) }
-                                VStack(alignment: .leading) { scoutingActions(entry.teamNumber) }
-                            }
-                            .controlSize(.large)
-                            if shared?.team.canCoordinate == true {
-                                Button {
-                                    assignmentTeam = ScoutTarget(match: match, team: entry.teamNumber)
-                                } label: {
-                                    Label("Manage Assignments", systemImage: "person.2")
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.vertical, DS.Spacing.xs)
+                        competitorRow(entry)
                     }
                     if match.competitors.contains(where: { $0.alliance.lowercased() == "solo" }) {
                         ForEach(match.teamNumbers, id: \.self) { number in
@@ -120,13 +91,53 @@ struct MatchDetailView: View {
                         }
                         FormSaveError(message: saveError)
                     }
-                    .navigationTitle("Scouts for #\(target.team)")
+                    .navigationTitle("Scouts for #\(String(target.team))")
                     .toolbar { Button("Done") { assignmentTeam = nil } }
                 }
             }
         }
         .sheet(isPresented: $showPlan) { MatchPlanEditor(event: event, match: match, directory: directory) }
         .sheet(isPresented: $showIssue) { RobotIssueFormSheet(match: match) }
+    }
+
+    private func competitorRow(_ entry: FTCMatch.Entry) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            NavigationLink {
+                teamProfile(entry.teamNumber)
+            } label: {
+                Text(directory.label(entry.teamNumber)).font(.headline)
+            }
+            Text(allianceLabel(entry)).font(.footnote).foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack { scoutingActions(entry.teamNumber) }
+                VStack(alignment: .leading) { scoutingActions(entry.teamNumber) }
+            }
+            .controlSize(.large)
+            if shared?.team.canCoordinate == true {
+                Button {
+                    assignmentTeam = ScoutTarget(match: match, team: entry.teamNumber)
+                } label: {
+                    Label("Manage Assignments", systemImage: "person.2")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(.vertical, DS.Spacing.xs)
+    }
+
+    private func allianceLabel(_ entry: FTCMatch.Entry) -> String {
+        var labels = [entry.alliance.capitalized]
+        if entry.noShow == true { labels.append("No show") }
+        if entry.dq == true { labels.append("Disqualified") }
+        if entry.surrogate == true { labels.append("Surrogate") }
+        return labels.joined(separator: " · ")
+    }
+
+    private func teamProfile(_ number: Int) -> TeamProfileView {
+        let detail = competition.selected?.id == event.id ? competition.detail : nil
+        let stats = detail?.standings?.value.first { $0.teamNumber == number }?.stats
+        let relevantMatches = detail?.matches?.value ?? [match]
+        return TeamProfileView(number: number, event: event, directory: directory, stats: stats, matches: relevantMatches)
     }
 
     @ViewBuilder
@@ -152,7 +163,7 @@ struct MatchDetailView: View {
     }
 
     private func score(_ red: Int?, _ blue: Int?) -> String {
-        [red, blue].map { $0.map(String.init) ?? "—" }.joined(separator: " / ")
+        [red, blue].map { $0.map { String($0) } ?? "—" }.joined(separator: " / ")
     }
 
     private func scoutLabel(_ number: Int) -> String {

@@ -7,8 +7,6 @@ struct TeamChatView: View {
     @State private var failure: String?
     @State private var composerReady = false
 
-    private var draftKey: String { "composer.\(workspace.uid).\(workspace.team.id)" }
-
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -55,45 +53,26 @@ struct TeamChatView: View {
         .navigationTitle("Team Chat")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            draft = UserDefaults.standard.string(forKey: draftKey) ?? ""
+            draft = workspace.loadChatDraft()
             composerReady = true
             workspace.openChat()
         }
         .onDisappear { workspace.closeChat() }
         .onChange(of: draft) { _, value in
             guard composerReady else { return }
-            UserDefaults.standard.set(String(value.prefix(4000)), forKey: draftKey)
+            do { try workspace.saveChatDraft(value) }
+            catch { failure = "Couldn’t keep a copy of the draft on this device." }
         }
     }
 
     private func messageRow(_ message: WorkspaceMessage) -> some View {
         let mine = message.sender == workspace.uid
         let name = mine ? "You" : (workspace.members.first { $0.id == message.sender }?.name ?? "Former or unavailable member")
-        return VStack(alignment: mine ? .trailing : .leading, spacing: DS.Spacing.xs) {
-            HStack(spacing: DS.Spacing.sm) {
-                Text(name).font(.caption.weight(.medium))
-                Text(message.date, format: .dateTime.month(.abbreviated).day().hour().minute())
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Text(message.text)
-                .textSelection(.enabled)
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.vertical, DS.Spacing.sm)
-                .background(mine ? DS.Color.accent.opacity(0.16) : DS.Color.surface,
-                            in: RoundedRectangle(cornerRadius: DS.Radius.row))
-            if message.delivery == .sending {
-                Label("Waiting to send", systemImage: "clock").font(.caption).foregroundStyle(.secondary)
-            } else if message.delivery == .failed,
-                      let write = workspace.pending.first(where: { $0.id == message.id }) {
-                Button("Retry Message", systemImage: "exclamationmark.circle") {
-                    do { try workspace.retry(write); failure = nil }
-                    catch { failure = "Couldn’t retry the message." }
-                }
-                .font(.footnote)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
-        .accessibilityElement(children: .contain)
+        return ConversationBubble(message: message, name: name, mine: mine, retry: {
+            guard let write = workspace.pending.first(where: { $0.id == message.id }) else { return }
+            do { try workspace.retry(write); failure = nil }
+            catch { failure = "Couldn’t retry the message." }
+        })
     }
 
     private var composer: some View {
@@ -128,6 +107,36 @@ struct TeamChatView: View {
         .padding(.horizontal, DS.Spacing.lg)
         .padding(.vertical, DS.Spacing.sm)
         .background(.regularMaterial)
+    }
+}
+
+struct ConversationBubble: View {
+    let message: WorkspaceMessage
+    let name: String
+    let mine: Bool
+    var retry: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(alignment: mine ? .trailing : .leading, spacing: DS.Spacing.xs) {
+            HStack(spacing: DS.Spacing.sm) {
+                Text(name).font(.caption.weight(.medium))
+                Text(message.date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text(message.text)
+                .textSelection(.enabled)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(mine ? DS.Color.accent.opacity(0.16) : DS.Color.surface,
+                            in: RoundedRectangle(cornerRadius: DS.Radius.row))
+            if message.delivery == .sending {
+                Label("Waiting to send", systemImage: "clock").font(.caption).foregroundStyle(.secondary)
+            } else if message.delivery == .failed, let retry {
+                Button("Retry Message", systemImage: "exclamationmark.circle", action: retry).font(.footnote)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+        .accessibilityElement(children: .contain)
     }
 }
 

@@ -71,6 +71,7 @@ final class SharedWorkspace {
     private let pageSize = 40
     private let db: Firestore
     private let queueURL: URL
+    private let composerURL: URL
     private var revisions: [String: String] = [:]
     private var synchronized: [String: StoredRecord] = [:]
     private var listeners: [ListenerRegistration] = []
@@ -105,6 +106,7 @@ final class SharedWorkspace {
         container = try WorkspaceStore.open(at: folder.appendingPathComponent("workspace.store"))
         container.mainContext.autosaveEnabled = false
         queueURL = folder.appendingPathComponent("outbox.json")
+        composerURL = folder.appendingPathComponent("chat-draft.txt")
         if FileManager.default.fileExists(atPath: queueURL.path) {
             pending = try JSONDecoder().decode([PendingWorkspaceWrite].self, from: Data(contentsOf: queueURL))
             for write in pending {
@@ -222,6 +224,15 @@ final class SharedWorkspace {
     func closeChat() {
         messagesListener?.remove()
         messagesListener = nil
+    }
+
+    func loadChatDraft() -> String {
+        (try? String(contentsOf: composerURL, encoding: .utf8)) ?? ""
+    }
+
+    func saveChatDraft(_ text: String) throws {
+        let data = Data(text.prefix(4000).utf8)
+        try data.write(to: composerURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
     func loadEarlierMessages() async {
@@ -342,16 +353,25 @@ final class SharedWorkspace {
         let context = container.mainContext
         let pendingIDs = Set(pending.compactMap { $0.record?.id })
         var next = synchronized
+        var unreadable = false
         do {
             for doc in snapshot.documents {
                 guard let kindValue = doc.get("kind") as? String, let kind = SharedRecordKind(rawValue: kindValue),
                       let key = doc.get("key") as? String, let data = doc.get("data") as? [String: Any],
                       let revision = doc.get("revision") as? String, let deleted = doc.get("deleted") as? Bool else { continue }
-                let payload = try JSONSerialization.data(withJSONObject: data)
+                guard JSONSerialization.isValidJSONObject(data),
+                      let payload = try? JSONSerialization.data(withJSONObject: data) else {
+                    unreadable = true
+                    continue
+                }
                 let record = SharedRecord(kind: kind, key: key, author: doc.get("author") as? String, payload: payload)
                 guard doc.documentID == record.id else { continue }
                 if !pendingIDs.contains(record.id) && next[record.id]?.revision != revision {
-                    try record.apply(in: context, deleted: deleted, preserveDraft: true)
+                    do { try record.apply(in: context, deleted: deleted, preserveDraft: true) }
+                    catch {
+                        unreadable = true
+                        continue
+                    }
                 }
                 next[record.id] = StoredRecord(record: record, revision: revision, deleted: deleted)
             }
@@ -359,6 +379,7 @@ final class SharedWorkspace {
             synchronized = next
             revisions = next.mapValues(\.revision)
             recordsReady = true
+            if unreadable { syncError = "Some team records could not be displayed by this version." }
             flush()
         } catch {
             context.rollback()

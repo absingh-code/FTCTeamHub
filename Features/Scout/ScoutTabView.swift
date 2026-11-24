@@ -124,7 +124,7 @@ struct ScoutTabView: View {
                 }
             }
             ForEach(legacy.filter { matchesSearch(String($0.teamScouted), String($0.matchNumber), $0.eventCode ?? "", $0.notes) }) { report in
-                NavigationLink("Match \(report.matchNumber) · #\(report.teamScouted) · Legacy") {
+                NavigationLink("Match \(report.matchNumber) · #\(String(report.teamScouted)) · Legacy") {
                     List {
                         Section("Original Report") {
                             LabeledContent("Auto points", value: String(report.autoScore))
@@ -169,7 +169,11 @@ struct ScoutTabView: View {
     }
 
     private var assignmentList: some View {
-        let current = assignments.filter { $0.author == auth.currentUser?.id }
+        let active = assignments.filter {
+            if let event = workspace.selected { return $0.matchKey.hasPrefix(event.id + ":") }
+            return $0.matchKey.hasPrefix("\(workspace.season):")
+        }
+        let current = active.filter { $0.author == auth.currentUser?.id }
         let matchLookup = Dictionary(uniqueKeysWithValues: (workspace.detail?.matches?.value ?? []).map { ($0.key.id, $0) })
         let shown = current.filter { matchesSearch(String($0.team), $0.matchLabel, $0.eventCode) }
             .sorted { ($0.scheduled ?? .distantFuture, $0.identity) < ($1.scheduled ?? .distantFuture, $1.identity) }
@@ -182,13 +186,13 @@ struct ScoutTabView: View {
                 ForEach(shown) { assignment in
                     let match = matchLookup[assignment.matchKey]
                     let report = reports.first { $0.identity == assignment.identity }
-                    let status = report?.submittedAt != nil ? "Saved" : report != nil ? "Draft" :
+                    let status = report?.submittedAt != nil ? shared?.reportDelivery(assignment.identity) ?? "Saved" : report != nil ? "Draft" :
                         match?.isPlayed == true ? "Report missing" : "Unstarted"
                     Button {
                         if let match { target = ScoutTarget(match: match, team: assignment.team) }
                     } label: {
                         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                            Text("#\(assignment.team) · \(assignment.matchLabel)")
+                            Text("#\(String(assignment.team)) · \(assignment.matchLabel)")
                             Text("\(assignment.eventCode) · \(status)")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
@@ -197,12 +201,33 @@ struct ScoutTabView: View {
                 }
             }
             if let event = workspace.selected, let detail = workspace.detail {
+                if shared?.team.canCoordinate == true {
+                    Section("Team Assignments") {
+                        ForEach(active.filter { matchesSearch(String($0.team), $0.matchLabel, assigneeName($0.author)) }
+                            .sorted { ($0.scheduled ?? .distantFuture, $0.identity) < ($1.scheduled ?? .distantFuture, $1.identity) }) { assignment in
+                            if let match = matchLookup[assignment.matchKey] {
+                                NavigationLink {
+                                    MatchDetailView(event: event, match: match, directory: detail.directory)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                                        Text("#\(String(assignment.team)) · \(assignment.matchLabel)")
+                                        let state = reports.contains { $0.identity == assignment.identity && $0.submittedAt != nil }
+                                            ? "Submitted" : match.isPlayed ? "Report missing" : "Assigned"
+                                        Text("\(assigneeName(assignment.author)) · \(state)")
+                                            .font(.footnote).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        if active.isEmpty { Text("No team assignments for this event.").foregroundStyle(.secondary) }
+                    }
+                }
                 let own = detail.matches?.value.filter {
                     !$0.isPlayed && $0.teamNumbers.contains(workspace.teamNumber)
                 } ?? []
                 let open = own.filter { match in
                     Set(match.teamNumbers.filter { $0 != workspace.teamNumber })
-                        .subtracting(current.filter { $0.matchKey == match.key.id }.map(\.team)).count > 0
+                        .subtracting(active.filter { $0.matchKey == match.key.id }.map(\.team)).count > 0
                 }
                 Section("Upcoming Coverage Gaps") {
                     if own.isEmpty {
@@ -218,6 +243,10 @@ struct ScoutTabView: View {
                 }
             }
         }
+    }
+
+    private func assigneeName(_ uid: String) -> String {
+        shared?.members.first { $0.id == uid }?.name ?? "Former or unavailable member"
     }
 
     private func matchesSearch(_ items: String...) -> Bool {

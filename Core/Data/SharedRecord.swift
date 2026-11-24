@@ -15,7 +15,7 @@ struct SharedRecord: Codable {
     static func id(_ kind: SharedRecordKind, _ key: String) -> String { "\(kind.rawValue):\(key)" }
 
     @MainActor
-    static func capture(_ model: any PersistentModel) throws -> Self? {
+    static func capture(_ model: any PersistentModel, includeDrafts: Bool = false) throws -> Self? {
         switch model {
         case let row as TaskItem:
             return try make(.task, row.id.uuidString, nil, TaskItemPayload(row))
@@ -28,7 +28,7 @@ struct SharedRecord: Codable {
         case let row as TeamEventRecord:
             return try make(.teamEvent, row.id.uuidString, nil, TeamEventRecordPayload(row))
         case let row as MatchObservation:
-            guard row.submittedAt != nil else { return nil }
+            guard row.submittedAt != nil || includeDrafts else { return nil }
             return try make(.matchReport, row.identity, row.author, MatchObservationPayload(row))
         case let row as PitObservation:
             return try make(.pitReport, row.id.uuidString, row.author, PitObservationPayload(row))
